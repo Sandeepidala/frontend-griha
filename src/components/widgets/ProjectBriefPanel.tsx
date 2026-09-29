@@ -340,6 +340,16 @@ export function ProjectBriefPanel() {
               </div>
               <Switch checked={brief.cornerPlot} onChange={(event) => setBrief({ cornerPlot: event.target.checked })} />
             </div>
+            <FormField label="Road width in front" hint="In feet; sets the floor-area and height limits. Leave blank if unsure.">
+              <Input
+                type="number"
+                min={0}
+                leftSlot={<Ruler />}
+                value={brief.roadWidthFt ?? ''}
+                onChange={(event) => setBrief({ roadWidthFt: Number(event.target.value) > 0 ? Number(event.target.value) : null })}
+                placeholder="e.g. 30"
+              />
+            </FormField>
             <div className="grid grid-cols-2 gap-4">
               <FormField label="State" hint="For local rates and building rules">
                 <Select value={brief.state ?? ''} onChange={(event) => setBrief({ state: event.target.value || null })}>
@@ -507,6 +517,7 @@ export function ProjectBriefPanel() {
                 value={`${form.plotWidth}' × ${form.plotHeight}' · ${PLOT_SHAPE_OPTIONS.find((o) => o.value === brief.plotShape)?.label}`}
               />
               <ReviewRow label="Facing" value={`${FACING_LABELS[form.facing]}${brief.cornerPlot ? ' · Corner plot' : ''}`} />
+              <ReviewRow label="Road width" value={brief.roadWidthFt ? `${brief.roadWidthFt} ft` : 'Not given'} />
               <ReviewRow label="Location" value={[brief.city, brief.state].filter(Boolean).join(', ') || 'Not given'} />
             </ReviewSection>
             <ReviewSection title="Budget" onEdit={() => goTo(1)}>

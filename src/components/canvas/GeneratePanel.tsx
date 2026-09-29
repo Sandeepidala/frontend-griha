@@ -7,6 +7,7 @@ import { Modal } from '@/components/ui/Modal'
 import { SidePanel } from '@/components/ui/SidePanel'
 import { Spinner } from '@/components/ui/Spinner'
 import { formatLakhs } from '@/lib/boq'
+import { compliantSetbacks, requirementsFor } from '@/lib/byelaws'
 import { scoreVariant } from '@/lib/designCheck'
 import { generateOptions, type GenerateResult, type GeneratedOption } from '@/lib/generator'
 import { useDesignStore } from '@/stores/useDesignStore'
@@ -72,6 +73,7 @@ function GenerateBody({ onApplied }: { onApplied: () => void }) {
   const floors = useDesignStore((state) => state.floors)
   const projectId = useDesignStore((state) => state.projectId)
   const replaceLayout = useDesignStore((state) => state.replaceLayout)
+  const updatePlot = useDesignStore((state) => state.updatePlot)
   const project = useProjectsStore((state) => state.projects.find((p) => p.id === projectId) ?? null)
   const [attempt, setAttempt] = useState(0)
   // Each result remembers the inputs it came from; a stale one counts as "still generating".
@@ -110,6 +112,10 @@ function GenerateBody({ onApplied }: { onApplied: () => void }) {
     setApplying(option.id)
     try {
       await replaceLayout(option.floors, `Layout generated: ${option.label} (score ${option.report.score}, ${formatLakhs(option.estimate.total)})`)
+      // The option was planned to the required setbacks; show those lines on the plan too.
+      const required = requirementsFor(plot, brief ?? null).setbacks
+      const setbacks = compliantSetbacks(plot.setbacks, required)
+      if (Object.entries(setbacks).some(([side, value]) => value !== plot.setbacks[side as keyof typeof setbacks])) updatePlot({ setbacks })
       toast.success(`${option.label} is now your plan`)
       onApplied()
     } catch (err) {

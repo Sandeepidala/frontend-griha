@@ -19,6 +19,7 @@ export interface BriefDto {
   corner_plot: boolean
   state: string | null
   city: string | null
+  road_width_ft: number | null
   floors: number
   bedrooms: number
   bathrooms: number
@@ -39,6 +40,8 @@ function mapBrief(dto: BriefDto): ProjectBrief {
     cornerPlot: dto.corner_plot,
     state: dto.state,
     city: dto.city,
+    // Briefs saved before the field existed don't carry it.
+    roadWidthFt: dto.road_width_ft ?? null,
     floors: dto.floors,
     bedrooms: dto.bedrooms,
     bathrooms: dto.bathrooms,
@@ -60,6 +63,7 @@ export function briefToDto(brief: ProjectBrief): BriefDto {
     corner_plot: brief.cornerPlot,
     state: brief.state,
     city: brief.city,
+    road_width_ft: brief.roadWidthFt,
     floors: brief.floors,
     bedrooms: brief.bedrooms,
     bathrooms: brief.bathrooms,

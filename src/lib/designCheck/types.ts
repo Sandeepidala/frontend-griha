@@ -3,7 +3,7 @@ import type { Floor, Plot } from '@/types/design'
 
 export type CheckStatus = 'pass' | 'warn' | 'fail'
 
-export type CheckCategory = 'requirements' | 'space' | 'light' | 'privacy' | 'vastu' | 'site' | 'budget'
+export type CheckCategory = 'requirements' | 'space' | 'light' | 'privacy' | 'vastu' | 'site' | 'budget' | 'compliance'
 
 export const CATEGORY_LABELS: Record<CheckCategory, string> = {
   requirements: 'Brief match',
@@ -13,6 +13,7 @@ export const CATEGORY_LABELS: Record<CheckCategory, string> = {
   vastu: 'Vastu',
   site: 'Site & setbacks',
   budget: 'Budget',
+  compliance: 'Bye-laws',
 }
 
 export interface CheckResult {

@@ -1,4 +1,5 @@
 import { estimateBoq, type BoqEstimate } from '@/lib/boq'
+import { compliantSetbacks, requirementsFor } from '@/lib/byelaws'
 import { center, unionRect } from '@/lib/drawings/geometry'
 import { runDesignCheck, type DesignReport } from '@/lib/designCheck'
 import { ZONE_LABELS, zoneOf } from '@/lib/designCheck/context'
@@ -89,10 +90,10 @@ function usable(floors: Floor[], cars: number) {
   return parkingOk && stairsOk && roomsOk
 }
 
-function buildCandidate(plot: Plot, brief: ProjectBrief, program: ProgramVariant, layout: LayoutVariant, env: Envelope): Floor[] {
+function buildCandidate(plot: Plot, brief: ProjectBrief, program: ProgramVariant, layout: LayoutVariant, env: Envelope, maxFootprint: number): Floor[] {
   const floorArea = env.length * env.depth
   const planned = buildProgram(brief, program, floorArea, layout.passage ? env.length * PASSAGE_DEPTH : 0)
-  const frame = footprintFor(env, planned, layout.align, layout.passage)
+  const frame = footprintFor(env, planned, layout.align, layout.passage, maxFootprint)
   const programs = planned.map((p) => rebalance(p, frame.length))
   const depths = bandDepths(programs, frame.depth, layout.passage)
   return programs.map((floor) => {
@@ -163,7 +164,12 @@ function summarise(floors: Floor[], plot: Plot) {
  * scored with the design check, the best are costed, and the top distinct options are returned.
  */
 export function generateOptions(input: GenerateInput): GenerateResult {
-  const { plot, brief, budget } = input
+  const { brief, budget } = input
+  // Plan to the bye-laws: at least the required setbacks, and no more ground coverage than allowed.
+  const rules = requirementsFor(input.plot, brief)
+  const plot: Plot = { ...input.plot, setbacks: compliantSetbacks(input.plot.setbacks, rules.setbacks) }
+  // Outer walls add about 0.75 ft all round to the rooms' footprint.
+  const maxFootprint = rules.maxCoverage * plot.width * plot.height * 0.9
   const env = buildableEnvelope(plot)
   if (!env) return { ok: false, reason: 'The plot is too small once the setbacks are taken off. Check the plot size and setbacks.' }
 
@@ -188,7 +194,7 @@ export function generateOptions(input: GenerateInput): GenerateResult {
       align: pick(rng, ['start', 'center', 'end'] as const),
       shuffle: shuffler(Math.floor(rng() * 1e9)),
     }
-    const floors = buildCandidate(plot, brief, program, layout, env)
+    const floors = buildCandidate(plot, brief, program, layout, env, maxFootprint)
     // Upper-floor rooms need a ground-floor room under them (columns and walls to stand on).
     if (!supported(floors)) continue
     // Two variants that place every room identically are the same option.
@@ -201,6 +207,12 @@ export function generateOptions(input: GenerateInput): GenerateResult {
   }
 
   const notes: string[] = []
+  const heightFt = brief.floors * FLOOR_TO_FLOOR
+  if (heightFt > rules.maxHeightFt) {
+    notes.push(
+      `${brief.floors} floors make the house about ${heightFt} ft tall; the bye-laws (${rules.set.name}) allow ${rules.maxHeightFt} ft on a ${rules.roadWidthFt} ft road. Fewer floors, or a wider road if yours is, would comply.`,
+    )
+  }
   const needed = programAreaPerFloor(buildProgram(brief, { kitchenBand: 'middle', quietRoomBand: 'middle', parking: 'perpendicular' }, env.length * env.depth, 0))
   const buildable = env.length * env.depth
   if (needed > buildable * 1.05) {
@@ -233,6 +245,9 @@ export function generateOptions(input: GenerateInput): GenerateResult {
     if (chosen.length === count) break
   }
 
+  if (chosen.length > 0 && chosen.every((c) => c.report.results.some((r) => r.id === 'law-far' && r.status === 'fail'))) {
+    notes.push(`Every option exceeds the floor area ratio allowed (${rules.far.toFixed(2)}); fewer or smaller rooms would bring it within the bye-laws.`)
+  }
   if (chosen.some((c) => !c.usable)) {
     notes.push(
       brief.parkingCars > 0

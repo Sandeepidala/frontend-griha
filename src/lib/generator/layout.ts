@@ -60,6 +60,8 @@ export interface BandDepths {
 
 const GRID = 0.5
 const snap = (n: number) => Math.round(n / GRID) * GRID
+/** Rounds down to the grid, for sizes that must never exceed a limit (the buildable area). */
+const snapDown = (n: number) => Math.floor(n / GRID + 1e-9) * GRID
 const BANDS: Band[] = ['front', 'middle', 'rear']
 
 /** Narrowest a room should get along the road; a suite needs a bedroom plus its bathroom column. */
@@ -126,6 +128,20 @@ export function rebalance(program: FloorProgram, length: number): FloorProgram {
     }
     if (!best) break
     best.room.band = best.band
+  }
+
+  // Daylight: the middle band has outside walls only at its two ends (fewer if the stairs take one).
+  // Extra habitable rooms there move to the front or rear, where every room gets an outside wall.
+  const ideal = (r: ProgramRoom) => Math.max(minWidth(r), shareOf(r) / 12)
+  const spare = (band: Band) => length - rooms.filter((r) => r.band === band).reduce((s, r) => s + ideal(r), 0)
+  const ends = 2 - rooms.filter((r) => r.band === 'middle' && r.role === 'stair').length
+  for (let step = 0; step < 6; step++) {
+    const lit = rooms.filter((r) => r.band === 'middle' && HABITABLE.includes(r.type))
+    if (lit.length <= ends) break
+    const room = lit.filter((r) => r.movable).sort((a, b) => ideal(b) - ideal(a))[0]
+    const target = room && (['rear', 'front'] as const).filter((b) => spare(b) >= ideal(room)).sort((a, b) => spare(b) - spare(a))[0]
+    if (!room || !target) break
+    room.band = target
   }
   return { ...program, rooms }
 }
@@ -200,15 +216,17 @@ function placeSuite(room: ProgramRoom, u: number, a: number, v: number, d: numbe
   return placed
 }
 
-/** Longest a living room or bedroom (or suite) should run along the band, as a multiple of its depth. */
+/** Longest a room should run along the band, as a multiple of its depth. */
 const MAX_PROPORTION = 2
+const CAPPED: RoomType[] = ['living', 'bedroom', 'kitchen', 'pooja', 'utility']
 
 function layoutRow(rooms: ProgramRoom[], u: number, length: number, v: number, d: number, outside: 'front' | 'rear', variant: LayoutVariant, level: number) {
   // On a generous band, rooms would stretch into corridors; cap them and leave the rest open instead.
-  const cap = (r: ProgramRoom) => (r.type === 'living' || r.type === 'bedroom' ? MAX_PROPORTION * d + (r.attachedBath ? 5.5 : 0) : Infinity)
+  const cap = (r: ProgramRoom) => (CAPPED.includes(r.type) ? MAX_PROPORTION * d + (r.attachedBath ? 5.5 : 0) : Infinity)
   const ideal = spans(u, length, rooms.map(shareOf), rooms.map(minWidth))
   const capped = rooms.map((r, i) => Math.min(ideal[i].size, cap(r)))
-  const leftover = snap(length - capped.reduce((s, w) => s + w, 0))
+  // Exactly what's left, so the row always ends at the band's edge (never past the setback line).
+  const leftover = length - capped.reduce((s, w) => s + w, 0)
   if (leftover >= 4 && capped.some((w, i) => w < ideal[i].size)) {
     const open: ProgramRoom = { key: `${rooms[0].key}-open`, name: level === 0 ? 'Sit-out' : 'Balcony', type: 'circulation', area: leftover * d, band: 'front', finish: 'tile' }
     const all = [...rooms, open]
@@ -249,11 +267,15 @@ function layoutBand(rooms: ProgramRoom[], band: Band, length: number, v: number,
   }
 
   let rest = variant.shuffle(rooms.filter((r) => !r.fixedWidth))
-  if (band === 'middle' && rest.length > 2) {
-    // Only the ends of the middle band touch an outside wall: habitable rooms go there, service rooms between.
+  if (band === 'middle' && rest.length >= 2) {
+    // Only the ends of the middle band touch an outside wall: habitable rooms go at whichever ends
+    // the staircase leaves free, with service rooms between.
     const habitable = rest.filter((r) => HABITABLE.includes(r.type))
     const service = rest.filter((r) => !HABITABLE.includes(r.type))
-    rest = [...habitable.slice(0, 1), ...service, ...habitable.slice(2), ...habitable.slice(1, 2)]
+    const stair = pinned.find((r) => r.role === 'stair')
+    if (!stair) rest = [...habitable.slice(0, 1), ...service, ...habitable.slice(2), ...habitable.slice(1, 2)]
+    else if (variant.stairEnd === 'start') rest = [...service, ...habitable.slice(1), ...habitable.slice(0, 1)]
+    else rest = [...habitable.slice(0, 1), ...habitable.slice(1), ...service]
   }
   const free = end - start
   if (free <= 0) return placed
@@ -316,7 +338,7 @@ function bandMinimums(programs: FloorProgram[]) {
  * to what the busiest floor needs (at least three bands deep), and the rest stays open as garden or
  * side yard, instead of stretching every room.
  */
-export function footprintFor(env: Envelope, programs: FloorProgram[], align: LayoutVariant['align'], passage: boolean): Frame {
+export function footprintFor(env: Envelope, programs: FloorProgram[], align: LayoutVariant['align'], passage: boolean, maxArea = Infinity): Frame {
   const busiest = Math.max(...programs.map((p) => p.rooms.reduce((s, r) => s + shareOf(r), 0)))
   const minima = bandMinimums(programs)
   // At least as long as the fullest band's rooms side by side at their minimum widths.
@@ -324,15 +346,18 @@ export function footprintFor(env: Envelope, programs: FloorProgram[], align: Lay
   const minDepth = Math.min(env.depth, Math.max(30, minima.front + minima.middle + minima.rear + (passage ? PASSAGE_DEPTH : 0)))
   // Walls and circulation take roughly an eighth on top of the rooms themselves.
   const needed = (length: number) => busiest * 1.12 + (passage ? length * PASSAGE_DEPTH : 0)
-  if (env.length * env.depth <= needed(env.length) * 1.15) return { length: env.length, depth: env.depth, offset: 0 }
   let length = env.length
   let depth = env.depth
+  if (length * depth <= needed(length) * 1.15 && length * depth <= maxArea) return { length, depth, offset: 0 }
   for (let pass = 0; pass < 2; pass++) {
     depth = Math.min(env.depth, Math.max(minDepth, needed(length) / length))
     length = Math.min(env.length, Math.max(20, minLength, needed(length) / depth))
   }
-  length = snap(length)
-  depth = snap(depth)
+  // Never more ground coverage than the bye-laws allow: shallower first, then shorter.
+  if (length * depth > maxArea) depth = Math.max(Math.min(minDepth, depth), maxArea / length)
+  if (length * depth > maxArea) length = Math.max(20, maxArea / depth)
+  length = snapDown(length)
+  depth = snapDown(depth)
   const spare = env.length - length
   return { length, depth, offset: align === 'start' ? 0 : align === 'end' ? spare : snap(spare / 2) }
 }

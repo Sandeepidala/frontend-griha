@@ -90,12 +90,13 @@ describe('runDesignCheck', () => {
     expect(results(vastuOff, 'vastu')).toEqual([])
   })
 
-  it('scores a plan that meets everything at 100', () => {
+  it('scores a sound plan at 100 in every design category', () => {
+    // Bye-laws depend on the rule set and plot size, so they're tested on their own (lib/byelaws).
     const { floors } = soundHouse()
     const report = runDesignCheck({ plot: plot(), floors, brief: brief() })
-    const problems = report.results.filter((r) => r.status !== 'pass')
+    const problems = report.results.filter((r) => r.status !== 'pass' && r.category !== 'compliance')
     expect(problems).toEqual([])
-    expect(report.score).toBe(100)
+    for (const c of report.categories.filter((c) => c.category !== 'compliance')) expect(c.score).toBe(100)
   })
 })
 
@@ -297,8 +298,4 @@ describe('site and setbacks', () => {
     expect(failed).toEqual(['site-setback-right'])
   })
 
-  it('warns about ground coverage above 75%', () => {
-    const report = runDesignCheck({ plot: plot(), floors: [floor([room('Living', 'living', 0, 0, 40, 40)])], brief: brief() })
-    expect(find(report, 'site-coverage')).toMatchObject({ status: 'warn', title: 'Ground coverage 100% of the plot' })
-  })
 })

@@ -1,5 +1,6 @@
 import { buildContext } from './context'
 import { budgetChecks } from './rules/budget'
+import { complianceChecks } from './rules/compliance'
 import { lightChecks } from './rules/light'
 import { privacyChecks } from './rules/privacy'
 import { requirementChecks } from './rules/requirements'
@@ -12,7 +13,7 @@ export * from './types'
 
 const STATUS_VALUE: Record<CheckStatus, number> = { pass: 1, warn: 0.5, fail: 0 }
 const STATUS_ORDER: Record<CheckStatus, number> = { fail: 0, warn: 1, pass: 2 }
-const CATEGORY_ORDER: CheckCategory[] = ['requirements', 'budget', 'space', 'light', 'privacy', 'vastu', 'site']
+const CATEGORY_ORDER: CheckCategory[] = ['requirements', 'budget', 'compliance', 'space', 'light', 'privacy', 'vastu', 'site']
 
 /** Green from 80, amber from 60, red below. */
 export function scoreVariant(score: number): 'success' | 'warning' | 'danger' {
@@ -51,6 +52,7 @@ export function runDesignCheck(input: DesignCheckInput): DesignReport {
     vastu: input.brief?.vastu ? vastuChecks(ctx) : [],
     site: siteChecks(ctx),
     budget: input.cost && input.cost.budget > 0 ? budgetChecks(input.cost) : [],
+    compliance: complianceChecks(ctx),
   }
 
   const categories: CategoryScore[] = CATEGORY_ORDER.filter((category) => !skipped.some((s) => s.category === category)).map(

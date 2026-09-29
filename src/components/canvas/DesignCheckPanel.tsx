@@ -1,7 +1,10 @@
 import { useState } from 'react'
 import { AlertTriangle, CheckCircle2, ChevronDown, CircleSlash, XCircle } from 'lucide-react'
+import { Badge } from '@/components/ui/Badge'
+import { Button } from '@/components/ui/Button'
 import { ProgressBar } from '@/components/ui/ProgressBar'
 import { SidePanel } from '@/components/ui/SidePanel'
+import { compliantSetbacks, requirementsFor } from '@/lib/byelaws'
 import { cn } from '@/lib/cn'
 import {
   CATEGORY_LABELS,
@@ -12,6 +15,7 @@ import {
   type DesignReport,
 } from '@/lib/designCheck'
 import { useDesignStore } from '@/stores/useDesignStore'
+import { useProjectsStore } from '@/stores/useProjectsStore'
 
 function scoreLabel(score: number) {
   return score >= 80 ? 'Good' : score >= 60 ? 'Needs some work' : 'Needs attention'
@@ -53,6 +57,40 @@ function ResultRow({ result }: { result: CheckResult }) {
   )
 }
 
+/** Which bye-laws were applied, what was assumed, and a fix for setback lines below the required ones. */
+function ByeLawNote() {
+  const plot = useDesignStore((state) => state.plot)
+  const updatePlot = useDesignStore((state) => state.updatePlot)
+  const projectId = useDesignStore((state) => state.projectId)
+  const brief = useProjectsStore((state) => state.projects.find((p) => p.id === projectId)?.brief ?? null)
+  const req = requirementsFor(plot, brief)
+  const target = compliantSetbacks(plot.setbacks, req.setbacks)
+  const linesTooLow = (['front', 'rear', 'left', 'right'] as const).some((side) => target[side] !== plot.setbacks[side])
+
+  return (
+    <div className="mt-2 flex flex-col gap-1.5 rounded-sm bg-surface-2 px-3 py-2 text-xs text-text-muted">
+      <p className="flex flex-wrap items-center gap-1.5">
+        <span className="font-medium text-text">{req.set.name}</span>
+        {req.set.status === 'placeholder' && <Badge variant="warning">Placeholder rules</Badge>}
+      </p>
+      {req.set.status === 'placeholder' && <p>{req.set.source}</p>}
+      {req.assumptions.map((assumption) => (
+        <p key={assumption}>{assumption}</p>
+      ))}
+      {linesTooLow && (
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <span>
+            Required setbacks: front {req.setbacks.front}, rear {req.setbacks.rear}, sides {req.setbacks.left} ft.
+          </span>
+          <Button size="sm" variant="outline" onClick={() => updatePlot({ setbacks: target })}>
+            Use required setbacks
+          </Button>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function CategorySection({ category }: { category: CategoryScore }) {
   const [showPassed, setShowPassed] = useState(false)
   const issues = category.results.filter((r) => r.status !== 'pass')
@@ -66,6 +104,7 @@ function CategorySection({ category }: { category: CategoryScore }) {
         <span className="font-mono text-sm tabular-nums text-text-muted">{category.score ?? '—'}</span>
       </div>
       {category.score !== null && <ProgressBar value={score} className="mt-2" variant={scoreVariant(score)} />}
+      {category.category === 'compliance' && <ByeLawNote />}
       {issues.length > 0 && (
         <ul className="mt-1 divide-y divide-border">
           {issues.map((result) => (
@@ -108,7 +147,7 @@ export function DesignCheckPanel({ open, onClose, report }: { open: boolean; onC
       open={open}
       onClose={onClose}
       title="Design check"
-      description="Checked live against the brief, budget, standard room sizes, daylight, privacy, Vastu and setbacks."
+      description="Checked live against the brief, budget, bye-laws, standard room sizes, daylight, privacy, Vastu and setbacks."
       defaultWidth={440}
     >
       <div className="flex flex-col gap-4 px-5 py-4">
@@ -144,8 +183,8 @@ export function DesignCheckPanel({ open, onClose, report }: { open: boolean; onC
         ))}
 
         <p className="px-1 text-xs text-text-faint">
-          Room sizes follow the National Building Code of India 2016 minimums; Vastu follows common practice. Your
-          local building bye-laws may differ; they’ll be checked in a later step.
+          Room sizes follow the National Building Code of India 2016 minimums; Vastu follows common practice. Bye-law
+          checks use the rule set shown above; confirm with your local authority before building.
         </p>
       </div>
     </SidePanel>

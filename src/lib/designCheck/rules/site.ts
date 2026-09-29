@@ -2,8 +2,6 @@ import { SETBACK_SIDES, providedSetbacks, requiredSetbacks, unionRect, type Side
 import type { CheckContext } from '../context'
 import type { CheckResult } from '../types'
 
-/** Typical upper limit on ground coverage in Indian bye-laws; step 5 replaces this with local rules. */
-const TYPICAL_MAX_COVERAGE = 0.75
 
 const SIDE_NAMES: Record<'front' | 'rear' | 'left' | 'right', string> = {
   front: 'Front (road side)',
@@ -12,7 +10,7 @@ const SIDE_NAMES: Record<'front' | 'rear' | 'left' | 'right', string> = {
   right: 'Right',
 }
 
-/** Open space around the building, ground coverage, and floors left empty. */
+/** The building against the setback lines set on the plot, and floors left empty (coverage is a bye-law check). */
 export function siteChecks(ctx: CheckContext): CheckResult[] {
   const results: CheckResult[] = []
   const footprints = ctx.models.map((model) => model.footprint).filter((f) => f !== null)
@@ -40,26 +38,6 @@ export function siteChecks(ctx: CheckContext): CheckResult[] {
   }
   if (short === 0) {
     results.push({ id: 'site-setbacks', category: 'site', status: 'pass', title: 'The building stays within all four setbacks', weight: 2 })
-  }
-
-  const ground = ctx.lowest?.footprint
-  if (ground) {
-    // Outer walls can overhang a plan drawn to the boundary; only built area inside the plot counts.
-    const inside = {
-      width: Math.max(0, Math.min(ground.x + ground.width, ctx.plot.width) - Math.max(ground.x, 0)),
-      height: Math.max(0, Math.min(ground.y + ground.height, ctx.plot.height) - Math.max(ground.y, 0)),
-    }
-    const coverage = (inside.width * inside.height) / (ctx.plot.width * ctx.plot.height)
-    results.push({
-      id: 'site-coverage',
-      category: 'site',
-      status: coverage <= TYPICAL_MAX_COVERAGE ? 'pass' : 'warn',
-      title: `Ground coverage ${Math.round(coverage * 100)}% of the plot`,
-      detail:
-        coverage <= TYPICAL_MAX_COVERAGE
-          ? undefined
-          : `Most bye-laws allow about ${Math.round(TYPICAL_MAX_COVERAGE * 100)}% at most; check your local limit.`,
-    })
   }
 
   for (const model of ctx.models) {

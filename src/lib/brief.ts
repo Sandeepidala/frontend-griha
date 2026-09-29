@@ -7,6 +7,7 @@ export const DEFAULT_BRIEF: ProjectBrief = {
   cornerPlot: false,
   state: null,
   city: null,
+  roadWidthFt: null,
   floors: 1,
   bedrooms: 2,
   bathrooms: 2,

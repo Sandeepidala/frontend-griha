@@ -5,6 +5,7 @@ import type { ProjectBrief } from '@/types/brief'
 import type { Floor, Plot } from '@/types/design'
 import { generateOptions, type GeneratedOption } from '.'
 import { bedroomsPerFloor } from './program'
+import { requirementsFor } from '@/lib/byelaws'
 
 function plot(overrides: Partial<Plot> = {}): Plot {
   return { width: 30, height: 40, facing: 'north', units: 'ft', setbacks: { front: 3, rear: 2, left: 2, right: 2 }, ...overrides }
@@ -62,6 +63,31 @@ describe('generateOptions', () => {
         for (let i = 0; i < floor.rooms.length; i++) {
           for (let j = i + 1; j < floor.rooms.length; j++) expect(intersects(floor.rooms[i], floor.rooms[j])).toBe(false)
         }
+      }
+    }
+  })
+
+  it('plans to the bye-laws: required setbacks even when the plot’s own are lower, and coverage within the limit', () => {
+    const p = plot({ width: 40, height: 60, setbacks: { front: 0, rear: 0, left: 0, right: 0 } })
+    const rules = requirementsFor(p, G1)
+    for (const o of generate(p, G1).options) {
+      const compliance = o.report.results.filter((r) => r.category === 'compliance' && r.id.startsWith('law-setback'))
+      expect(compliance.map((r) => r.status)).toEqual(['pass'])
+      for (const r of o.floors[0].rooms) {
+        expect(r.y).toBeGreaterThanOrEqual(rules.setbacks.front + EXTERIOR_WALL - 0.01)
+        expect(r.y + r.height).toBeLessThanOrEqual(60 - rules.setbacks.rear - EXTERIOR_WALL + 0.01)
+      }
+      expect(o.report.results.find((r) => r.id === 'law-coverage')?.status).toBe('pass')
+    }
+  })
+
+  it('never lets a room past a setback line, for any facing or corner plot', () => {
+    for (const facing of ['north', 'south', 'east', 'west'] as const) {
+      const p = plot({ width: 35, height: 45, facing })
+      const b = brief({ floors: 2, bedrooms: 3, bathrooms: 3, parkingCars: 1, kitchenType: 'open', extraRooms: ['home_office', 'utility_room'], cornerPlot: true })
+      for (const o of generate(p, b).options) {
+        const failed = o.report.results.filter((r) => r.id.startsWith('law-setback-') || r.id.startsWith('site-setback-'))
+        expect(failed.map((r) => `${facing}: ${r.title}`)).toEqual([])
       }
     }
   })

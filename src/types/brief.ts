@@ -23,6 +23,8 @@ export interface ProjectBrief {
   cornerPlot: boolean
   state: string | null
   city: string | null
+  /** Width of the road in front, ft; bye-law floor-area and height limits depend on it. */
+  roadWidthFt: number | null
   floors: number
   bedrooms: number
   bathrooms: number
