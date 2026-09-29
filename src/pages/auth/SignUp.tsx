@@ -12,6 +12,7 @@ import { FormField } from '@/components/widgets/FormField'
 import { PasswordInput } from '@/components/widgets/PasswordInput'
 import { PasswordStrengthMeter } from '@/components/widgets/PasswordStrengthMeter'
 import { SocialButton } from '@/components/widgets/SocialButton'
+import { SIMULATED_AUTH_AVAILABLE } from '@/lib/dataMode'
 import { useAuthStore } from '@/stores/useAuthStore'
 import { toast } from '@/stores/useToastStore'
 import type { AccountType } from '@/types/auth'
@@ -140,34 +141,38 @@ export function SignUp() {
         </Button>
       </div>
 
-      <Divider label="or sign up with" className="my-4" />
+      {SIMULATED_AUTH_AVAILABLE && (
+        <>
+          <Divider label="or sign up with" className="my-4" />
 
-      <div className="grid grid-cols-3 gap-2">
-        <SocialButton
-          variant="compact"
-          icon={<GoogleIcon />}
-          label="Google"
-          isLoading={socialLoading === 'google'}
-          disabled={!!socialLoading}
-          onClick={() => handleSocial('google')}
-        />
-        <SocialButton
-          variant="compact"
-          icon={<FacebookIcon />}
-          label="Facebook"
-          isLoading={socialLoading === 'facebook'}
-          disabled={!!socialLoading}
-          onClick={() => handleSocial('facebook')}
-        />
-        <SocialButton
-          variant="compact"
-          icon={<AppleIcon />}
-          label="Apple"
-          isLoading={socialLoading === 'apple'}
-          disabled={!!socialLoading}
-          onClick={() => handleSocial('apple')}
-        />
-      </div>
+          <div className="grid grid-cols-3 gap-2">
+            <SocialButton
+              variant="compact"
+              icon={<GoogleIcon />}
+              label="Google"
+              isLoading={socialLoading === 'google'}
+              disabled={!!socialLoading}
+              onClick={() => handleSocial('google')}
+            />
+            <SocialButton
+              variant="compact"
+              icon={<FacebookIcon />}
+              label="Facebook"
+              isLoading={socialLoading === 'facebook'}
+              disabled={!!socialLoading}
+              onClick={() => handleSocial('facebook')}
+            />
+            <SocialButton
+              variant="compact"
+              icon={<AppleIcon />}
+              label="Apple"
+              isLoading={socialLoading === 'apple'}
+              disabled={!!socialLoading}
+              onClick={() => handleSocial('apple')}
+            />
+          </div>
+        </>
+      )}
 
       <p className="mt-4 text-center text-sm text-text-muted">
         Already have an account?{' '}

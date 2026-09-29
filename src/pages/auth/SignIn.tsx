@@ -13,7 +13,7 @@ import { FormField } from '@/components/widgets/FormField'
 import { OtpInput } from '@/components/widgets/OtpInput'
 import { PasswordInput } from '@/components/widgets/PasswordInput'
 import { SocialButton } from '@/components/widgets/SocialButton'
-import { DEMO_EMAIL, DEMO_MODE, DEMO_PASSWORD } from '@/lib/dataMode'
+import { DEMO_EMAIL, DEMO_PASSWORD, SIMULATED_AUTH_AVAILABLE } from '@/lib/dataMode'
 import { useAuthStore } from '@/stores/useAuthStore'
 import { toast } from '@/stores/useToastStore'
 
@@ -107,18 +107,20 @@ export function SignIn() {
       <h1 className="font-display text-2xl font-bold text-text">Welcome back</h1>
       <p className="mt-1 text-sm text-text-muted">Sign in to continue designing your home.</p>
 
-      <SegmentedControl
-        value={method}
-        onChange={(value) => {
-          setMethod(value)
-          setError(null)
-        }}
-        options={[
-          { value: 'password', label: 'Email', icon: Mail },
-          { value: 'phone', label: 'Phone', icon: Phone },
-        ]}
-        className="mt-4 grid w-full grid-cols-2"
-      />
+      {SIMULATED_AUTH_AVAILABLE && (
+        <SegmentedControl
+          value={method}
+          onChange={(value) => {
+            setMethod(value)
+            setError(null)
+          }}
+          options={[
+            { value: 'password', label: 'Email', icon: Mail },
+            { value: 'phone', label: 'Phone', icon: Phone },
+          ]}
+          className="mt-4 grid w-full grid-cols-2"
+        />
+      )}
 
       {method === 'password' ? (
         <div className="mt-4 flex flex-col gap-3">
@@ -134,9 +136,11 @@ export function SignIn() {
           <div>
             <div className="flex items-center justify-between">
               <label className="text-sm font-medium text-text">Password</label>
-              <Link to="/forgot-password" className="text-xs font-medium text-primary hover:underline">
-                Forgot password?
-              </Link>
+              {SIMULATED_AUTH_AVAILABLE && (
+                <Link to="/forgot-password" className="text-xs font-medium text-primary hover:underline">
+                  Forgot password?
+                </Link>
+              )}
             </div>
             <PasswordInput
               className="mt-1.5"
@@ -153,11 +157,18 @@ export function SignIn() {
           <Button isLoading={isLoading} onClick={handlePasswordSignIn} fullWidth>
             Sign in
           </Button>
-          {DEMO_MODE && (
-            <p className="text-center text-xs text-text-faint">
-              Demo account — {DEMO_EMAIL} / {DEMO_PASSWORD}
-            </p>
-          )}
+          <button
+            type="button"
+            onClick={() => {
+              setEmail(DEMO_EMAIL)
+              setPassword(DEMO_PASSWORD)
+              setError(null)
+            }}
+            className="text-center text-xs text-text-faint transition-colors hover:text-text-muted"
+          >
+            Demo account — {DEMO_EMAIL} / {DEMO_PASSWORD} ·{' '}
+            <span className="font-medium text-primary">Use it</span>
+          </button>
         </div>
       ) : (
         <div className="mt-4 flex flex-col gap-3">
@@ -200,57 +211,61 @@ export function SignIn() {
         </div>
       )}
 
-      <Divider label="or continue with" className="my-4" />
+      {SIMULATED_AUTH_AVAILABLE && (
+        <>
+          <Divider label="or continue with" className="my-4" />
 
-      <div className="grid grid-cols-3 gap-2">
-        <SocialButton
-          variant="compact"
-          icon={<GoogleIcon />}
-          label="Google"
-          isLoading={socialLoading === 'google'}
-          disabled={!!socialLoading}
-          onClick={() => handleSocial('google')}
-        />
-        <SocialButton
-          variant="compact"
-          icon={<FacebookIcon />}
-          label="Facebook"
-          isLoading={socialLoading === 'facebook'}
-          disabled={!!socialLoading}
-          onClick={() => handleSocial('facebook')}
-        />
-        <SocialButton
-          variant="compact"
-          icon={<AppleIcon />}
-          label="Apple"
-          isLoading={socialLoading === 'apple'}
-          disabled={!!socialLoading}
-          onClick={() => handleSocial('apple')}
-        />
-      </div>
-
-      {!ssoOpen ? (
-        <button
-          type="button"
-          onClick={() => setSsoOpen(true)}
-          className="mt-3 w-full text-center text-xs font-medium text-text-muted hover:text-text"
-        >
-          Sign in with company SSO
-        </button>
-      ) : (
-        <div className="mt-3 flex flex-col gap-2.5 rounded-sm border border-border bg-surface-2 p-3">
-          <FormField label="Work email">
-            <Input
-              type="email"
-              value={workEmail}
-              onChange={(event) => setWorkEmail(event.target.value)}
-              placeholder="you@builderco.com"
+          <div className="grid grid-cols-3 gap-2">
+            <SocialButton
+              variant="compact"
+              icon={<GoogleIcon />}
+              label="Google"
+              isLoading={socialLoading === 'google'}
+              disabled={!!socialLoading}
+              onClick={() => handleSocial('google')}
             />
-          </FormField>
-          <Button variant="outline" size="sm" isLoading={isLoading} onClick={handleSso}>
-            Continue with SSO
-          </Button>
-        </div>
+            <SocialButton
+              variant="compact"
+              icon={<FacebookIcon />}
+              label="Facebook"
+              isLoading={socialLoading === 'facebook'}
+              disabled={!!socialLoading}
+              onClick={() => handleSocial('facebook')}
+            />
+            <SocialButton
+              variant="compact"
+              icon={<AppleIcon />}
+              label="Apple"
+              isLoading={socialLoading === 'apple'}
+              disabled={!!socialLoading}
+              onClick={() => handleSocial('apple')}
+            />
+          </div>
+
+          {!ssoOpen ? (
+            <button
+              type="button"
+              onClick={() => setSsoOpen(true)}
+              className="mt-3 w-full text-center text-xs font-medium text-text-muted hover:text-text"
+            >
+              Sign in with company SSO
+            </button>
+          ) : (
+            <div className="mt-3 flex flex-col gap-2.5 rounded-sm border border-border bg-surface-2 p-3">
+              <FormField label="Work email">
+                <Input
+                  type="email"
+                  value={workEmail}
+                  onChange={(event) => setWorkEmail(event.target.value)}
+                  placeholder="you@builderco.com"
+                />
+              </FormField>
+              <Button variant="outline" size="sm" isLoading={isLoading} onClick={handleSso}>
+                Continue with SSO
+              </Button>
+            </div>
+          )}
+        </>
       )}
 
       <p className="mt-4 text-center text-sm text-text-muted">

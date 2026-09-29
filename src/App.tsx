@@ -1,5 +1,6 @@
-import { BrowserRouter, Route, Routes } from 'react-router-dom'
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { RequireAuth } from '@/components/RequireAuth'
+import { SIMULATED_AUTH_AVAILABLE } from '@/lib/dataMode'
 import { Toaster } from '@/components/ui/Toaster'
 import { Dashboard } from '@/pages/Dashboard'
 import { ForgotPassword } from '@/pages/auth/ForgotPassword'
@@ -16,8 +17,15 @@ export default function App() {
       <Routes>
         <Route path="/sign-in" element={<SignIn />} />
         <Route path="/sign-up" element={<SignUp />} />
-        <Route path="/forgot-password" element={<ForgotPassword />} />
-        <Route path="/reset-password" element={<ResetPassword />} />
+        {/* Password reset is simulated (see lib/dataMode), so it only exists in demo mode. */}
+        <Route
+          path="/forgot-password"
+          element={SIMULATED_AUTH_AVAILABLE ? <ForgotPassword /> : <Navigate to="/sign-in" replace />}
+        />
+        <Route
+          path="/reset-password"
+          element={SIMULATED_AUTH_AVAILABLE ? <ResetPassword /> : <Navigate to="/sign-in" replace />}
+        />
         <Route
           path="/"
           element={
