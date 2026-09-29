@@ -1,8 +1,10 @@
 import { useEffect } from 'react'
 import { useParams } from 'react-router-dom'
 import { CanvasToolbar } from '@/components/canvas/CanvasToolbar'
+import { DrawingsWorkspace } from '@/components/drawings/DrawingsWorkspace'
 import { ModelViewer3D } from '@/components/canvas/ModelViewer3D'
 import { PlanCanvas2D } from '@/components/canvas/PlanCanvas2D'
+import { SelectionToolbar } from '@/components/canvas/SelectionToolbar'
 import { Navbar } from '@/components/layout/Navbar'
 import { Button } from '@/components/ui/Button'
 import { Spinner } from '@/components/ui/Spinner'
@@ -28,6 +30,7 @@ export function ProjectWorkspace() {
     <div className="flex h-svh flex-col">
       <Navbar />
       <CanvasToolbar />
+      {status === 'idle' && viewMode !== 'drawings' && <SelectionToolbar />}
       <div className="min-h-0 flex-1">
         {status === 'loading' ? (
           <div className="flex h-full items-center justify-center">
@@ -42,6 +45,7 @@ export function ProjectWorkspace() {
           <>
             {viewMode === '2d' && <PlanCanvas2D />}
             {viewMode === '3d' && <ModelViewer3D />}
+            {viewMode === 'drawings' && <DrawingsWorkspace />}
             {viewMode === 'split' && (
               <div className="flex h-full flex-col md:flex-row">
                 <div className="min-h-0 min-w-0 flex-1 border-b border-border md:border-r md:border-b-0">

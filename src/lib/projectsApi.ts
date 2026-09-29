@@ -8,7 +8,7 @@ import type {
   ProjectSummary,
   ActivityLogEntry,
 } from '@/types/project'
-import type { Plot, Room, RoomType } from '@/types/design'
+import type { Plot, RoomRecord, RoomType } from '@/types/design'
 
 interface ProjectDto {
   id: string
@@ -66,7 +66,7 @@ function mapProject(dto: ProjectDto): ProjectSummary {
   }
 }
 
-function mapRoom(dto: RoomDto): Room {
+function mapRoom(dto: RoomDto): RoomRecord {
   return { id: dto.id, name: dto.name, type: dto.type, x: dto.x, y: dto.y, width: dto.width, height: dto.height }
 }
 
@@ -100,6 +100,16 @@ export async function createProject(input: NewProjectInput): Promise<ProjectSumm
 export async function getProject(projectId: string): Promise<ProjectDetail> {
   const dto = await apiRequest<ProjectDetailDto>(`/projects/${projectId}`)
   return { ...mapProject(dto), rooms: dto.rooms.map(mapRoom) }
+}
+
+export async function updateProjectPlot(
+  projectId: string,
+  patch: Partial<Pick<ProjectSummary, 'plotWidth' | 'plotHeight' | 'facing'>>,
+): Promise<void> {
+  await apiRequest(`/projects/${projectId}`, {
+    method: 'PATCH',
+    body: { plot_width: patch.plotWidth, plot_height: patch.plotHeight, facing: patch.facing },
+  })
 }
 
 async function listProjectActivityDtos(projectId: string): Promise<ActivityDto[]> {

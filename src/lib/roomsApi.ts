@@ -1,5 +1,5 @@
 import { apiRequest } from './apiClient'
-import type { Room, RoomType } from '@/types/design'
+import type { RoomRecord, RoomType } from '@/types/design'
 
 interface RoomDto {
   id: string
@@ -12,14 +12,14 @@ interface RoomDto {
   height: number
 }
 
-function mapRoom(dto: RoomDto): Room {
+function mapRoom(dto: RoomDto): RoomRecord {
   return { id: dto.id, name: dto.name, type: dto.type, x: dto.x, y: dto.y, width: dto.width, height: dto.height }
 }
 
 export async function createRoom(
   projectId: string,
-  input: { name: string; type: RoomType; x: number; y: number; width: number; height: number },
-): Promise<Room> {
+  input: Omit<RoomRecord, 'id'>,
+): Promise<RoomRecord> {
   const dto = await apiRequest<RoomDto>(`/projects/${projectId}/rooms`, { method: 'POST', body: input })
   return mapRoom(dto)
 }
@@ -27,7 +27,7 @@ export async function createRoom(
 export async function updateRoom(
   projectId: string,
   roomId: string,
-  patch: Partial<{ x: number; y: number; width: number; height: number }>,
+  patch: Partial<Omit<RoomRecord, 'id'>>,
 ): Promise<void> {
   await apiRequest(`/projects/${projectId}/rooms/${roomId}`, { method: 'PATCH', body: patch })
 }

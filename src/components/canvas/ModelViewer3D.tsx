@@ -1,60 +1,86 @@
 import { Billboard, ContactShadows, Edges, Line, OrbitControls, Text } from '@react-three/drei'
 import { Canvas } from '@react-three/fiber'
+import { roomPalette } from '@/components/canvas/roomPalette'
 import { useThemeColors } from '@/hooks/useThemeColors'
 import { useDesignStore } from '@/stores/useDesignStore'
-import type { Room, RoomType } from '@/types/design'
-import type { ThemeColors } from '@/hooks/useThemeColors'
+import type { FloorFinish, Room } from '@/types/design'
 
-const WALL_HEIGHT = 9
+const ACTIVE_OPACITY = 0.92
+const GHOST_OPACITY = 0.22
 
-function roomColor(type: RoomType, colors: ThemeColors) {
-  switch (type) {
-    case 'bedroom':
-      return colors['--color-primary-soft']
-    case 'kitchen':
-      return colors['--color-warning-soft']
-    case 'wet':
-      return colors['--color-info-soft']
-    case 'pooja':
-      return colors['--color-accent-soft']
-    case 'circulation':
-      return colors['--color-surface']
+function floorFinishColor(finish: FloorFinish) {
+  switch (finish) {
+    case 'marble':
+      return '#f4f2ed'
+    case 'wood':
+      return '#a9784f'
+    case 'carpet':
+      return '#7a6f8a'
+    case 'concrete':
+      return '#9a9a9a'
+    case 'tile':
     default:
-      return colors['--color-surface-2']
+      return '#c9ccd1'
   }
 }
 
-function RoomBox({ room, plotWidth, plotHeight }: { room: Room; plotWidth: number; plotHeight: number }) {
+function degToRad(deg: number) {
+  return (deg * Math.PI) / 180
+}
+
+function RoomBox({
+  room,
+  plotWidth,
+  plotHeight,
+  floorElevation,
+  interactive,
+}: {
+  room: Room
+  plotWidth: number
+  plotHeight: number
+  floorElevation: number
+  interactive: boolean
+}) {
   const colors = useThemeColors()
-  const selectedRoomId = useDesignStore((state) => state.selectedRoomId)
-  const selectRoom = useDesignStore((state) => state.selectRoom)
-  const selected = room.id === selectedRoomId
+  const selection = useDesignStore((state) => state.selection)
+  const select = useDesignStore((state) => state.select)
+  const selected = interactive && selection?.type === 'room' && selection.id === room.id
 
   const x = room.x + room.width / 2 - plotWidth / 2
   const z = room.y + room.height / 2 - plotHeight / 2
+  const baseY = floorElevation + room.elevation
+  const opacity = interactive ? ACTIVE_OPACITY : GHOST_OPACITY
 
   return (
-    <group>
-      <mesh
-        position={[x, WALL_HEIGHT / 2, z]}
-        onClick={(event) => {
-          event.stopPropagation()
-          selectRoom(room.id)
-        }}
-      >
-        <boxGeometry args={[room.width, WALL_HEIGHT, room.height]} />
-        <meshStandardMaterial
-          color={roomColor(room.type, colors)}
-          transparent
-          opacity={0.92}
-        />
-        <Edges color={selected ? colors['--color-primary'] : colors['--color-border-strong']} linewidth={selected ? 2 : 1} />
+    <group position={[x, 0, z]} rotation={[0, degToRad(room.rotation), 0]}>
+      <mesh position={[0, baseY + 0.03, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow={interactive}>
+        <planeGeometry args={[room.width, room.height]} />
+        <meshStandardMaterial color={floorFinishColor(room.floorFinish)} transparent opacity={opacity} />
       </mesh>
-      <Billboard position={[x, WALL_HEIGHT + 1.2, z]}>
-        <Text fontSize={1.1} color={colors['--color-text']} anchorX="center" anchorY="middle">
-          {room.name}
-        </Text>
-      </Billboard>
+      <mesh
+        position={[0, baseY + room.wallHeight / 2, 0]}
+        onClick={
+          interactive
+            ? (event) => {
+                event.stopPropagation()
+                select({ type: 'room', id: room.id })
+              }
+            : undefined
+        }
+      >
+        <boxGeometry args={[room.width, room.wallHeight, room.height]} />
+        <meshStandardMaterial color={room.color ?? roomPalette(room.type, colors).fill} transparent opacity={opacity} />
+        {interactive && (
+          <Edges color={selected ? colors['--color-primary'] : colors['--color-border-strong']} linewidth={selected ? 2 : 1} />
+        )}
+      </mesh>
+      {interactive && (
+        <Billboard position={[0, baseY + room.wallHeight + 1.2, 0]}>
+          <Text fontSize={1.1} color={colors['--color-text']} anchorX="center" anchorY="middle">
+            {room.label ?? room.name}
+          </Text>
+        </Billboard>
+      )}
     </group>
   )
 }
@@ -62,8 +88,9 @@ function RoomBox({ room, plotWidth, plotHeight }: { room: Room; plotWidth: numbe
 function Scene() {
   const colors = useThemeColors()
   const plot = useDesignStore((state) => state.plot)
-  const rooms = useDesignStore((state) => state.rooms)
-  const selectRoom = useDesignStore((state) => state.selectRoom)
+  const floors = useDesignStore((state) => state.floors)
+  const activeFloorId = useDesignStore((state) => state.activeFloorId)
+  const select = useDesignStore((state) => state.select)
 
   return (
     <>
@@ -73,7 +100,7 @@ function Scene() {
       <mesh
         rotation={[-Math.PI / 2, 0, 0]}
         position={[0, -0.05, 0]}
-        onClick={() => selectRoom(null)}
+        onClick={() => select(null)}
         receiveShadow
       >
         <planeGeometry args={[plot.width * 1.6, plot.height * 1.6]} />
@@ -92,9 +119,20 @@ function Scene() {
         lineWidth={1.5}
       />
 
-      {rooms.map((room) => (
-        <RoomBox key={room.id} room={room} plotWidth={plot.width} plotHeight={plot.height} />
-      ))}
+      {floors.map((floor) =>
+        floor.rooms
+          .filter((room) => room.visible)
+          .map((room) => (
+            <RoomBox
+              key={room.id}
+              room={room}
+              plotWidth={plot.width}
+              plotHeight={plot.height}
+              floorElevation={floor.elevation}
+              interactive={floor.id === activeFloorId}
+            />
+          )),
+      )}
 
       <Billboard position={[0, 0.6, -plot.height / 2 - 3]}>
         <Text fontSize={1.4} color={colors['--color-accent']} anchorX="center" anchorY="middle">
