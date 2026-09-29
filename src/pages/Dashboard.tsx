@@ -1,9 +1,10 @@
-import { Building2, CheckCircle2, Clock, FolderKanban, IndianRupee, Sparkles } from 'lucide-react'
+import { AlertTriangle, Building2, CheckCircle2, Clock, FolderKanban, IndianRupee, Sparkles } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { Container } from '@/components/layout/Container'
 import { Navbar } from '@/components/layout/Navbar'
 import { Button } from '@/components/ui/Button'
 import { Card, CardBody } from '@/components/ui/Card'
+import { Spinner } from '@/components/ui/Spinner'
 import { EmptyState } from '@/components/widgets/EmptyState'
 import { ProjectStatusBadge } from '@/components/widgets/ProjectStatusBadge'
 import { StatCard } from '@/components/widgets/StatCard'
@@ -14,8 +15,40 @@ export function Dashboard() {
   const navigate = useNavigate()
   const projects = useProjectsStore((state) => state.projects)
   const activityLog = useProjectsStore((state) => state.activityLog)
+  const status = useProjectsStore((state) => state.status)
+  const error = useProjectsStore((state) => state.error)
+  const hasLoaded = useProjectsStore((state) => state.hasLoaded)
   const setActiveProject = useProjectsStore((state) => state.setActiveProject)
   const openNewProjectPanel = useProjectsStore((state) => state.openNewProjectPanel)
+  const fetchProjects = useProjectsStore((state) => state.fetchProjects)
+
+  if (status === 'loading' && !hasLoaded) {
+    return (
+      <div className="min-h-svh bg-bg">
+        <Navbar />
+        <Container className="flex min-h-[calc(100svh-3rem)] items-center justify-center py-10">
+          <Spinner size="lg" />
+        </Container>
+      </div>
+    )
+  }
+
+  if (status === 'error' && projects.length === 0) {
+    return (
+      <div className="min-h-svh bg-bg">
+        <Navbar />
+        <Container className="flex min-h-[calc(100svh-3rem)] flex-col justify-center py-10">
+          <EmptyState
+            icon={AlertTriangle}
+            title="Couldn't load your projects"
+            description={error ?? undefined}
+            action={<Button onClick={fetchProjects}>Try again</Button>}
+            className="mx-auto w-full max-w-lg border-none py-0"
+          />
+        </Container>
+      </div>
+    )
+  }
 
   if (projects.length === 0) {
     return (

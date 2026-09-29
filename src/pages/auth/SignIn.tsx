@@ -13,7 +13,7 @@ import { FormField } from '@/components/widgets/FormField'
 import { OtpInput } from '@/components/widgets/OtpInput'
 import { PasswordInput } from '@/components/widgets/PasswordInput'
 import { SocialButton } from '@/components/widgets/SocialButton'
-import { DEMO_EMAIL, DEMO_PASSWORD, useAuthStore } from '@/stores/useAuthStore'
+import { useAuthStore } from '@/stores/useAuthStore'
 import { toast } from '@/stores/useToastStore'
 
 type Method = 'password' | 'phone'
@@ -152,9 +152,6 @@ export function SignIn() {
           <Button isLoading={isLoading} onClick={handlePasswordSignIn} fullWidth>
             Sign in
           </Button>
-          <p className="text-center text-xs text-text-faint">
-            Demo account — {DEMO_EMAIL} / {DEMO_PASSWORD}
-          </p>
         </div>
       ) : (
         <div className="mt-4 flex flex-col gap-3">

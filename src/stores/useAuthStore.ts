@@ -1,5 +1,9 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import * as authApi from '@/lib/authApi'
+import { ApiError } from '@/lib/apiClient'
+import { clearSession } from '@/lib/session'
+import { useProjectsStore } from '@/stores/useProjectsStore'
 import type { AuthProvider, AuthUser, SignUpInput } from '@/types/auth'
 
 interface RegisteredUser {
@@ -24,18 +28,6 @@ interface AuthState {
   signOut: () => void
 }
 
-export const DEMO_EMAIL = 'sandeep.gowda@movingwalls.com'
-export const DEMO_PASSWORD = 'griha1234'
-
-const DEMO_USER: AuthUser = {
-  id: 'demo-user',
-  name: 'Sandeep Gowda',
-  email: DEMO_EMAIL,
-  accountType: 'builder',
-  provider: 'password',
-  emailVerified: true,
-}
-
 const SOCIAL_PROFILES: Record<string, Pick<AuthUser, 'name' | 'email'>> = {
   google: { name: 'Ananya Kapoor', email: 'ananya.kapoor@gmail.com' },
   facebook: { name: 'Rahul Mehta', email: 'rahul.mehta@outlook.com' },
@@ -55,49 +47,29 @@ export const useAuthStore = create<AuthState>()(
     (set, get) => ({
       user: null,
       status: 'idle',
-      registeredUsers: [{ email: DEMO_EMAIL, password: DEMO_PASSWORD, user: DEMO_USER }],
+      registeredUsers: [],
       pendingResetEmail: null,
 
       signInWithPassword: async (email, password) => {
         set({ status: 'authenticating' })
-        await delay(700)
-        const match = get().registeredUsers.find(
-          (entry) => entry.email.toLowerCase() === email.trim().toLowerCase(),
-        )
-        if (!match) {
+        try {
+          const user = await authApi.login(email.trim(), password)
+          set({ user, status: 'idle' })
+        } catch (err) {
           set({ status: 'idle' })
-          throw new Error('No account found with that email. Check the address or sign up.')
+          throw new Error(err instanceof ApiError ? err.message : 'Could not reach the server.')
         }
-        if (match.password !== password) {
-          set({ status: 'idle' })
-          throw new Error('Incorrect password. Try again or reset it.')
-        }
-        set({ user: match.user, status: 'idle' })
       },
 
       signUpWithPassword: async ({ name, email, password, accountType }) => {
         set({ status: 'authenticating' })
-        await delay(800)
-        const exists = get().registeredUsers.some(
-          (entry) => entry.email.toLowerCase() === email.trim().toLowerCase(),
-        )
-        if (exists) {
+        try {
+          const user = await authApi.signup({ name: name.trim(), email: email.trim(), password, accountType })
+          set({ user, status: 'idle' })
+        } catch (err) {
           set({ status: 'idle' })
-          throw new Error('An account with this email already exists. Try signing in instead.')
+          throw new Error(err instanceof ApiError ? err.message : 'Could not reach the server.')
         }
-        const user: AuthUser = {
-          id: createId(),
-          name: name.trim(),
-          email: email.trim(),
-          accountType,
-          provider: 'password',
-          emailVerified: false,
-        }
-        set((state) => ({
-          registeredUsers: [...state.registeredUsers, { email: user.email, password, user }],
-          user,
-          status: 'idle',
-        }))
       },
 
       signInWithProvider: async (provider) => {
@@ -191,7 +163,11 @@ export const useAuthStore = create<AuthState>()(
         }))
       },
 
-      signOut: () => set({ user: null }),
+      signOut: () => {
+        clearSession()
+        useProjectsStore.getState().reset()
+        set({ user: null })
+      },
     }),
     {
       name: 'griha-auth',

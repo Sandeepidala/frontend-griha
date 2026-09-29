@@ -44,6 +44,7 @@ export function NewProjectPanel() {
 
   const [form, setForm] = useState(initialFormState)
   const [error, setError] = useState<string | null>(null)
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   function toggleRoom(room: string) {
     setForm((prev) => ({
@@ -60,7 +61,7 @@ export function NewProjectPanel() {
     closePanel()
   }
 
-  function handleCreate() {
+  async function handleCreate() {
     const width = Number(form.plotWidth)
     const height = Number(form.plotHeight)
     const budget = Number(form.budget)
@@ -69,23 +70,30 @@ export function NewProjectPanel() {
     if (!width || width <= 0 || !height || height <= 0) return setError('Enter valid plot dimensions.')
     if (!budget || budget <= 0) return setError('Enter a budget amount.')
 
-    const project = createProject({
-      name: form.name.trim(),
-      plotWidth: width,
-      plotHeight: height,
-      facing: form.facing,
-      budget,
-      turnkey: form.turnkey,
-      culturalPreference: form.culturalPreference,
-      specialRooms: form.checkedRooms,
-      notes: form.notes.trim() || undefined,
-    })
+    setIsSubmitting(true)
+    try {
+      const project = await createProject({
+        name: form.name.trim(),
+        plotWidth: width,
+        plotHeight: height,
+        facing: form.facing,
+        budget,
+        turnkey: form.turnkey,
+        culturalPreference: form.culturalPreference,
+        specialRooms: form.checkedRooms,
+        notes: form.notes.trim() || undefined,
+      })
 
-    setForm(initialFormState)
-    setError(null)
-    closePanel()
-    navigate(`/projects/${project.id}`)
-    toast.success(`${project.name} created — opening workspace`)
+      setForm(initialFormState)
+      setError(null)
+      closePanel()
+      navigate(`/projects/${project.id}`)
+      toast.success(`${project.name} created — opening workspace`)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not create the project.')
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   return (
@@ -97,10 +105,12 @@ export function NewProjectPanel() {
       defaultWidth={440}
       footer={
         <div className="flex w-full items-center justify-end gap-2">
-          <Button variant="ghost" onClick={handleClose}>
+          <Button variant="ghost" onClick={handleClose} disabled={isSubmitting}>
             Cancel
           </Button>
-          <Button onClick={handleCreate}>Create project</Button>
+          <Button onClick={handleCreate} isLoading={isSubmitting}>
+            Create project
+          </Button>
         </div>
       }
     >

@@ -7,6 +7,16 @@ export type RoomType =
   | 'utility'
   | 'circulation'
 
+export const ROOM_TYPE_LABELS: Record<RoomType, string> = {
+  living: 'Living Room',
+  bedroom: 'Bedroom',
+  kitchen: 'Kitchen',
+  wet: 'Bathroom',
+  pooja: 'Pooja Room',
+  utility: 'Utility / Store',
+  circulation: 'Foyer / Passage',
+}
+
 export interface Room {
   id: string
   name: string

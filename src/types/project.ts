@@ -1,4 +1,4 @@
-import type { Plot } from './design'
+import type { Plot, Room } from './design'
 
 export type CulturalPreference = 'hindu' | 'neutral' | 'muslim'
 export type ProjectStatus = 'draft' | 'generating' | 'in_review' | 'ready'
@@ -20,6 +20,10 @@ export interface ProjectSummary {
 }
 
 export type NewProjectInput = Omit<ProjectSummary, 'id' | 'status' | 'createdAt' | 'updatedAt'>
+
+export interface ProjectDetail extends ProjectSummary {
+  rooms: Room[]
+}
 
 export interface ActivityLogEntry {
   id: string
