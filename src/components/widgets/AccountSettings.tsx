@@ -1,4 +1,4 @@
-import { Download, KeyRound, LogOut, ShieldAlert, Trash2 } from 'lucide-react'
+import { Download, KeyRound, LogOut, Mail, ShieldAlert, Trash2 } from 'lucide-react'
 import { type FormEvent, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { downloadBlob } from '@/components/drawings/exportSheets'
@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/Button'
 import { Card, CardBody } from '@/components/ui/Card'
 import { Input } from '@/components/ui/Input'
 import { Modal } from '@/components/ui/Modal'
+import { Switch } from '@/components/ui/Switch'
 import { FormField } from '@/components/widgets/FormField'
 import { ApiError } from '@/lib/apiError'
 import * as authApi from '@/lib/authApi'
@@ -119,6 +120,44 @@ function DeleteAccount({ open, onClose }: { open: boolean; onClose: () => void }
   )
 }
 
+function EmailNotifications() {
+  const user = useAuthStore((state) => state.user)
+  const [saving, setSaving] = useState(false)
+  const enabled = user?.emailNotifications ?? true
+
+  async function toggle(next: boolean) {
+    setSaving(true)
+    try {
+      useAuthStore.setState({ user: await authApi.setEmailNotifications(next) })
+      toast.success(next ? "We'll email you about your architect reviews." : 'Review emails turned off.')
+    } catch (err) {
+      toast.danger(message(err, "Couldn't update your email settings."))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Card>
+      <CardBody className="flex items-start justify-between gap-4">
+        <div className="flex items-start gap-3">
+          <Mail className="mt-0.5 size-5 shrink-0 text-text-muted" />
+          <div>
+            <p className="font-medium text-text">Review emails</p>
+            <p className="text-sm text-text-muted">
+              {user?.role === 'architect'
+                ? 'New paid reviews waiting in the queue, and replies from your customers.'
+                : 'Payment receipts, when an architect starts, their comments, and the verdict.'}
+              {user?.email ? ` Sent to ${user.email}.` : ''}
+            </p>
+          </div>
+        </div>
+        <Switch aria-label="Review emails" checked={enabled} disabled={saving} onChange={(e) => toggle(e.target.checked)} />
+      </CardBody>
+    </Card>
+  )
+}
+
 /** Password, sessions and the customer's own data (project document §10: security and privacy). */
 export function AccountSettings() {
   const navigate = useNavigate()
@@ -155,6 +194,8 @@ export function AccountSettings() {
 
   return (
     <div className="flex flex-col gap-4">
+      <EmailNotifications />
+
       <Card>
         <CardBody className="flex flex-col gap-4">
           <div className="flex items-start gap-3">

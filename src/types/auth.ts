@@ -15,6 +15,8 @@ export interface AuthUser {
   provider: AuthProvider
   emailVerified: boolean
   role: UserRole
+  /** Emails about architect reviews; off when the user opts out in Settings. */
+  emailNotifications: boolean
 }
 
 export interface SignUpInput {

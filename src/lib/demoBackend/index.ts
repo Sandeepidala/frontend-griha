@@ -74,7 +74,10 @@ function upgradeStoredProjects(data: DemoDb): DemoDb {
 function upgradeStoredReviews(data: DemoDb): DemoDb {
   data.reviews ??= []
   data.review_comments ??= []
-  for (const user of data.users) user.role ??= 'customer'
+  for (const user of data.users) {
+    user.role ??= 'customer'
+    user.email_notifications ??= true
+  }
   if (!data.users.some((u) => u.email === DEMO_ARCHITECT_EMAIL)) data.users.push(demoArchitect())
   return data
 }
@@ -196,6 +199,7 @@ function signup(body: Body): AuthResponseDto {
     provider: 'password',
     email_verified: false,
     role: 'customer',
+    email_notifications: true,
   })
   return authResponse(user)
 }
@@ -225,6 +229,7 @@ function providerSignIn(body: Body): AuthResponseDto {
       provider: (body.provider as UserDto['provider']) ?? 'password',
       email_verified: Boolean(email),
       role: 'customer',
+      email_notifications: true,
     })
   return authResponse(user)
 }
@@ -633,6 +638,11 @@ function route(method: HttpMethod, segments: string[], body: Body, token: string
     if (method === 'GET' && projectId === 'me' && !collection) return publicUser(currentUser(token))
     if (method === 'GET' && projectId === 'me' && collection === 'export') return exportData(currentUser(token))
     if (method === 'DELETE' && projectId === 'me') return deleteAccount(currentUser(token), body)
+    if (method === 'PATCH' && projectId === 'me' && !collection) {
+      const user = currentUser(token)
+      if (typeof body.email_notifications === 'boolean') user.email_notifications = body.email_notifications
+      return publicUser(user)
+    }
     if (method === 'POST' && projectId === 'change-password') return changePassword(currentUser(token), body)
     if (method === 'POST' && projectId === 'logout-all') {
       const user = currentUser(token)

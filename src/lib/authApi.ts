@@ -13,6 +13,7 @@ export interface UserDto {
   email_verified: boolean
   /** Missing from sessions saved before architect reviews existed. */
   role?: AuthUser['role']
+  email_notifications?: boolean
 }
 
 export interface AuthResponseDto {
@@ -32,6 +33,7 @@ function mapUser(dto: UserDto): AuthUser {
     provider: dto.provider,
     emailVerified: dto.email_verified,
     role: dto.role ?? 'customer',
+    emailNotifications: dto.email_notifications ?? true,
   }
 }
 
@@ -80,6 +82,11 @@ export async function changePassword(currentPassword: string, newPassword: strin
     body: { current_password: currentPassword, new_password: newPassword },
   })
   return applyAuthResponse(dto)
+}
+
+/** Turns emails about architect reviews on or off. */
+export async function setEmailNotifications(enabled: boolean): Promise<AuthUser> {
+  return mapUser(await apiRequest<UserDto>('/auth/me', { method: 'PATCH', body: { email_notifications: enabled } }))
 }
 
 /** Revokes every session of this account, on every device including this one. */

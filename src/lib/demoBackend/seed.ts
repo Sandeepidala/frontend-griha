@@ -272,6 +272,7 @@ export function demoArchitect(): DemoUser {
     provider: 'password',
     email_verified: true,
     role: 'architect',
+    email_notifications: true,
     password: DEMO_PASSWORD,
   }
 }
@@ -288,6 +289,7 @@ export function createSeedDb(): DemoDb {
     provider: 'password',
     email_verified: true,
     role: 'customer',
+    email_notifications: true,
     password: DEMO_PASSWORD,
   }
   db.users.push(demoUser, demoArchitect())

@@ -59,6 +59,7 @@ export function ReviewPanel({ open, onClose, onChange }: ReviewPanelProps) {
   const select = useDesignStore((state) => state.select)
   const fetchProjects = useProjectsStore((state) => state.fetchProjects)
   const userId = useAuthStore((state) => state.user?.id ?? '')
+  const emailsOn = useAuthStore((state) => state.user?.emailNotifications ?? false)
   const [reviews, setReviews] = useState<Review[] | null>(null)
   const [quote, setQuote] = useState<ReviewQuote | null>(null)
   const [note, setNote] = useState('')
@@ -240,6 +241,7 @@ export function ReviewPanel({ open, onClose, onChange }: ReviewPanelProps) {
               )}
               <p className="text-xs text-text-faint">
                 The architect sees your plan as it was when you requested the review. Changes you make now aren't included.
+                {emailsOn && active.status !== 'awaiting_payment' && " We'll email you when the architect starts, comments and replies."}
               </p>
             </div>
 
