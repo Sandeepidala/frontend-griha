@@ -108,7 +108,7 @@ export function DesignCheckPanel({ open, onClose, report }: { open: boolean; onC
       open={open}
       onClose={onClose}
       title="Design check"
-      description="Checked live against the brief, standard room sizes, daylight, privacy, Vastu and setbacks."
+      description="Checked live against the brief, budget, standard room sizes, daylight, privacy, Vastu and setbacks."
       defaultWidth={440}
     >
       <div className="flex flex-col gap-4 px-5 py-4">

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { CanvasToolbar } from '@/components/canvas/CanvasToolbar'
+import { CostEstimatePanel } from '@/components/canvas/CostEstimatePanel'
 import { DesignCheckPanel } from '@/components/canvas/DesignCheckPanel'
 import { DrawingsWorkspace } from '@/components/drawings/DrawingsWorkspace'
 import { ModelViewer3D } from '@/components/canvas/ModelViewer3D'
@@ -9,6 +10,7 @@ import { SelectionToolbar } from '@/components/canvas/SelectionToolbar'
 import { Navbar } from '@/components/layout/Navbar'
 import { Button } from '@/components/ui/Button'
 import { Spinner } from '@/components/ui/Spinner'
+import { useCostEstimate } from '@/hooks/useCostEstimate'
 import { useDesignReport } from '@/hooks/useDesignReport'
 import { useDesignStore } from '@/stores/useDesignStore'
 import { useProjectsStore } from '@/stores/useProjectsStore'
@@ -20,8 +22,10 @@ export function ProjectWorkspace() {
   const error = useDesignStore((state) => state.error)
   const loadProject = useDesignStore((state) => state.loadProject)
   const setActiveProject = useProjectsStore((state) => state.setActiveProject)
-  const designReport = useDesignReport()
+  const costEstimate = useCostEstimate()
+  const designReport = useDesignReport(costEstimate)
   const [designCheckOpen, setDesignCheckOpen] = useState(false)
+  const [costEstimateOpen, setCostEstimateOpen] = useState(false)
 
   useEffect(() => {
     if (id) {
@@ -36,8 +40,11 @@ export function ProjectWorkspace() {
       <CanvasToolbar
         designReport={status === 'idle' ? designReport : undefined}
         onOpenDesignCheck={() => setDesignCheckOpen(true)}
+        costEstimate={status === 'idle' ? costEstimate : undefined}
+        onOpenCostEstimate={() => setCostEstimateOpen(true)}
       />
       <DesignCheckPanel open={designCheckOpen} onClose={() => setDesignCheckOpen(false)} report={designReport} />
+      <CostEstimatePanel open={costEstimateOpen} onClose={() => setCostEstimateOpen(false)} />
       {status === 'idle' && viewMode !== 'drawings' && <SelectionToolbar />}
       <div className="min-h-0 flex-1">
         {status === 'loading' ? (

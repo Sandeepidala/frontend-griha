@@ -3,7 +3,7 @@ import type { Floor, Plot } from '@/types/design'
 
 export type CheckStatus = 'pass' | 'warn' | 'fail'
 
-export type CheckCategory = 'requirements' | 'space' | 'light' | 'privacy' | 'vastu' | 'site'
+export type CheckCategory = 'requirements' | 'space' | 'light' | 'privacy' | 'vastu' | 'site' | 'budget'
 
 export const CATEGORY_LABELS: Record<CheckCategory, string> = {
   requirements: 'Brief match',
@@ -12,6 +12,7 @@ export const CATEGORY_LABELS: Record<CheckCategory, string> = {
   privacy: 'Privacy',
   vastu: 'Vastu',
   site: 'Site & setbacks',
+  budget: 'Budget',
 }
 
 export interface CheckResult {
@@ -49,4 +50,6 @@ export interface DesignCheckInput {
   floors: Floor[]
   /** Null when the project has no brief loaded yet: brief-match checks are skipped. */
   brief: ProjectBrief | null
+  /** The cost estimate against the budget (from lib/boq); without it the budget check is skipped. */
+  cost?: { estimate: number; budget: number; turnkey: boolean } | null
 }

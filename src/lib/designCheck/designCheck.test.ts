@@ -83,9 +83,9 @@ describe('runDesignCheck', () => {
   it('skips brief match and Vastu without a brief, and Vastu when the brief turns it off', () => {
     const { floors } = soundHouse()
     const noBrief = runDesignCheck({ plot: plot(), floors, brief: null })
-    expect(noBrief.skipped.map((s) => s.category).sort()).toEqual(['requirements', 'vastu'])
+    expect(noBrief.skipped.map((s) => s.category).sort()).toEqual(['budget', 'requirements', 'vastu'])
     const vastuOff = runDesignCheck({ plot: plot(), floors, brief: brief({ vastu: false }) })
-    expect(vastuOff.skipped).toEqual([{ category: 'vastu', reason: 'Vastu is turned off in the brief.' }])
+    expect(vastuOff.skipped).toContainEqual({ category: 'vastu', reason: 'Vastu is turned off in the brief.' })
     expect(results(vastuOff, 'vastu')).toEqual([])
   })
 
@@ -255,6 +255,22 @@ describe('Vastu', () => {
     const poor = runDesignCheck({ plot: plot(), floors: [floor(westFoyer)], brief: brief({ vastu: true }) })
     expect(find(good, 'vastu-entrance')?.status).toBe('pass')
     expect(find(poor, 'vastu-entrance')?.status).toBe('warn')
+  })
+})
+
+describe('budget', () => {
+  const check = (estimate: number, budget: number) =>
+    find(runDesignCheck({ plot: plot(), floors: soundHouse().floors, brief: brief(), cost: { estimate, budget, turnkey: false } }), 'budget-total')
+
+  it('passes within budget, suggests up to 10% over, and fails beyond', () => {
+    expect(check(40e5, 45e5)).toMatchObject({ status: 'pass', title: 'Estimate ₹40.0 L is within the ₹45.0 L construction-only budget' })
+    expect(check(48e5, 45e5)).toMatchObject({ status: 'warn', title: 'Estimate ₹48.0 L is 7% over the ₹45.0 L construction-only budget' })
+    expect(check(60e5, 45e5)?.status).toBe('fail')
+  })
+
+  it('is skipped without a budget', () => {
+    const report = runDesignCheck({ plot: plot(), floors: soundHouse().floors, brief: brief(), cost: { estimate: 40e5, budget: 0, turnkey: false } })
+    expect(report.skipped.map((s) => s.category)).toContain('budget')
   })
 })
 

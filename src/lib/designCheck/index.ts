@@ -1,4 +1,5 @@
 import { buildContext } from './context'
+import { budgetChecks } from './rules/budget'
 import { lightChecks } from './rules/light'
 import { privacyChecks } from './rules/privacy'
 import { requirementChecks } from './rules/requirements'
@@ -11,7 +12,7 @@ export * from './types'
 
 const STATUS_VALUE: Record<CheckStatus, number> = { pass: 1, warn: 0.5, fail: 0 }
 const STATUS_ORDER: Record<CheckStatus, number> = { fail: 0, warn: 1, pass: 2 }
-const CATEGORY_ORDER: CheckCategory[] = ['requirements', 'space', 'light', 'privacy', 'vastu', 'site']
+const CATEGORY_ORDER: CheckCategory[] = ['requirements', 'budget', 'space', 'light', 'privacy', 'vastu', 'site']
 
 /** Green from 80, amber from 60, red below. */
 export function scoreVariant(score: number): 'success' | 'warning' | 'danger' {
@@ -37,6 +38,7 @@ export function runDesignCheck(input: DesignCheckInput): DesignReport {
   if (!input.brief?.vastu) {
     skipped.push({ category: 'vastu', reason: input.brief ? 'Vastu is turned off in the brief.' : 'No brief for this project yet.' })
   }
+  if (!input.cost || !(input.cost.budget > 0)) skipped.push({ category: 'budget', reason: 'No budget or cost estimate yet.' })
   if (ctx.allRooms.length === 0) {
     return { score: 0, categories: [], results: [], skipped: [...skipped, { category: 'site', reason: 'The plan has no rooms yet.' }] }
   }
@@ -48,6 +50,7 @@ export function runDesignCheck(input: DesignCheckInput): DesignReport {
     privacy: privacyChecks(ctx),
     vastu: input.brief?.vastu ? vastuChecks(ctx) : [],
     site: siteChecks(ctx),
+    budget: input.cost && input.cost.budget > 0 ? budgetChecks(input.cost) : [],
   }
 
   const categories: CategoryScore[] = CATEGORY_ORDER.filter((category) => !skipped.some((s) => s.category === category)).map(
