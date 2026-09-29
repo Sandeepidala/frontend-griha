@@ -147,7 +147,7 @@ export function SheetFrame({ meta, bounds, aside, side, northArrow, overlay, chi
             x1={TITLE_X - PAD - asideWidth}
             x2={TITLE_X - PAD - asideWidth}
             y1={BORDER.y + 4}
-            y2={BORDER.y + BORDER.height - 4}
+            y2={BORDER.y + BORDER.height - PAD - 8}
             stroke={INK.hair}
             strokeWidth={0.3}
           />

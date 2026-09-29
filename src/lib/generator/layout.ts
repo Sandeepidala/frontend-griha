@@ -219,18 +219,23 @@ function placeSuite(room: ProgramRoom, u: number, a: number, v: number, d: numbe
 /** Longest a room should run along the band, as a multiple of its depth. */
 const MAX_PROPORTION = 2
 const CAPPED: RoomType[] = ['living', 'bedroom', 'kitchen', 'pooja', 'utility']
+/** A bathroom wider than this is wasted floor; the rest of its row stays open. */
+const MAX_BATH_WIDTH = 8
 
-function layoutRow(rooms: ProgramRoom[], u: number, length: number, v: number, d: number, outside: 'front' | 'rear', variant: LayoutVariant, level: number) {
+function layoutRow(rooms: ProgramRoom[], band: Band, u: number, length: number, v: number, d: number, outside: 'front' | 'rear', variant: LayoutVariant, level: number) {
   // On a generous band, rooms would stretch into corridors; cap them and leave the rest open instead.
-  const cap = (r: ProgramRoom) => (CAPPED.includes(r.type) ? MAX_PROPORTION * d + (r.attachedBath ? 5.5 : 0) : Infinity)
+  const cap = (r: ProgramRoom) =>
+    r.type === 'wet' ? Math.max(minWidth(r), Math.min(MAX_BATH_WIDTH, snap(r.area / d))) : CAPPED.includes(r.type) ? MAX_PROPORTION * d + (r.attachedBath ? 5.5 : 0) : Infinity
   const ideal = spans(u, length, rooms.map(shareOf), rooms.map(minWidth))
   const capped = rooms.map((r, i) => Math.min(ideal[i].size, cap(r)))
   // Exactly what's left, so the row always ends at the band's edge (never past the setback line).
   const leftover = length - capped.reduce((s, w) => s + w, 0)
   if (leftover >= 4 && capped.some((w, i) => w < ideal[i].size)) {
-    const open: ProgramRoom = { key: `${rooms[0].key}-open`, name: level === 0 ? 'Sit-out' : 'Balcony', type: 'circulation', area: leftover * d, band: 'front', finish: 'tile' }
+    // Along an outside wall the spare space is a sit-out or balcony; inside the house, a dining area or lobby.
+    const name = band !== 'middle' ? (level === 0 ? 'Sit-out' : 'Balcony') : level === 0 && leftover * d >= 70 ? 'Dining' : 'Lobby'
+    const open: ProgramRoom = { key: `${rooms[0].key}-open`, name, type: 'circulation', area: leftover * d, band, finish: 'tile' }
     const all = [...rooms, open]
-    // The open space goes at the end of the row, against an outside wall.
+    // The open space goes at the end of the row.
     return layoutRowExact(all, u, [...capped, leftover], v, d, outside, variant)
   }
   return layoutRowExact(rooms, u, ideal.map((s) => s.size), v, d, outside, variant)
@@ -304,7 +309,7 @@ function layoutBand(rooms: ProgramRoom[], band: Band, length: number, v: number,
     const column: ProgramRoom = { ...a, key: `${a.key}+${b.key}`, area: a.area + b.area }
     const row = rest.filter((r) => r !== a && r !== b)
     row.splice(Math.min(row.length, Math.floor(rest.indexOf(a) / 2)), 0, column)
-    for (const piece of layoutRow(row, start, free, v, d, outside, variant, level)) {
+    for (const piece of layoutRow(row, band, start, free, v, d, outside, variant, level)) {
       if (piece.key !== column.key) {
         placed.push(piece)
         continue
@@ -317,7 +322,7 @@ function layoutBand(rooms: ProgramRoom[], band: Band, length: number, v: number,
       )
     }
   } else {
-    placed.push(...layoutRow(rest, start, free, v, d, outside, variant, level))
+    placed.push(...layoutRow(rest, band, start, free, v, d, outside, variant, level))
   }
   return placed
 }

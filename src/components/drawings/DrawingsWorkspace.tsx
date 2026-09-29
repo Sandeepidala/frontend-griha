@@ -1,6 +1,5 @@
 import { Box, ChevronDown, ChevronLeft, ChevronRight, Download, FileStack, Layers, Minus, Plus, Printer } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Button } from '@/components/ui/Button'
 import { IconButton } from '@/components/ui/IconButton'
 import { Tooltip } from '@/components/ui/Tooltip'
 import { useElementSize } from '@/hooks/useElementSize'
@@ -10,7 +9,8 @@ import { useAuthStore } from '@/stores/useAuthStore'
 import { useDesignStore } from '@/stores/useDesignStore'
 import { useActiveProject } from '@/stores/useProjectsStore'
 import { toast } from '@/stores/useToastStore'
-import { downloadSvg, downloadUrl, fullSetMarkup, printSheets, sheetMarkup } from './exportSheets'
+import { ExportMenu } from './ExportMenu'
+import { downloadSvg, downloadUrl, printSheets, sheetMarkup } from './exportSheets'
 import { Model3DSheet, type ModelMode } from './Model3DSheet'
 import { SHEET_COMPONENTS } from './renderSheet'
 
@@ -102,9 +102,16 @@ export function DrawingsWorkspace() {
   const userName = useAuthStore((state) => state.user?.name)
 
   const register = useMemo(() => sheetRegister(floors), [floors])
+  const brief = project?.brief ?? null
+  const budget = project?.budget
+  const turnkey = project?.turnkey
   const set = useMemo(
-    () => buildDrawingSet(plot, floors, project?.name ?? 'Untitled project', userName ?? 'Griha'),
-    [plot, floors, project?.name, userName],
+    () =>
+      buildDrawingSet(plot, floors, project?.name ?? 'Untitled project', userName ?? 'Griha', {
+        brief,
+        budget: budget !== undefined && turnkey !== undefined ? { amount: budget, turnkey } : null,
+      }),
+    [plot, floors, project?.name, userName, brief, budget, turnkey],
   )
   const index = Math.max(0, register.findIndex((s) => s.id === activeSheetId))
   const sheet = register[index]
@@ -168,15 +175,6 @@ export function DrawingsWorkspace() {
   function handlePrintSheet() {
     const markup = sheetMarkup(set, sheet, activeFloorId)
     if (markup && !printSheets([{ markup }], fileBase)) toast.warning('Allow pop-ups to print drawings.')
-  }
-
-  function handlePrintSet() {
-    const pages = fullSetMarkup(set, register)
-    if (!printSheets(pages, `${project?.name ?? 'Project'} — Drawing set`)) {
-      toast.warning('Allow pop-ups to print drawings.')
-      return
-    }
-    toast.success(`Prepared ${pages.length} sheets — choose "Save as PDF" for a PDF set.`)
   }
 
   const Sheet = SHEET_COMPONENTS[sheet.kind]
@@ -260,9 +258,7 @@ export function DrawingsWorkspace() {
               </IconButton>
             </Tooltip>
           )}
-          <Button size="sm" variant="primary" leftIcon={<FileStack className="size-4" />} onClick={handlePrintSet}>
-            Print full set
-          </Button>
+          <ExportMenu set={set} register={register} sheet={sheet} floorId={activeFloorId} />
         </div>
 
         <div

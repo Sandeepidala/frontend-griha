@@ -9,7 +9,7 @@ import {
   requiredSetbacks,
 } from '@/lib/drawings/geometry'
 import type { DrawingSet } from '@/lib/drawings/sheets'
-import { COMPOUND, ROAD_WIDTH, type Site, driveway, gateRect, landscapeLayout, siteContext } from '@/lib/drawings/site'
+import { COMPOUND, type Site, driveway, gateRect, landscapeLayout, siteContext } from '@/lib/drawings/site'
 import { INK, SheetFrame, Stack, legendBlock, notesBlock, tableBlock } from '../SheetFrame'
 import { DimChain, Label, PlanBase } from '../symbols'
 import { type SheetProps, fmtArea, sheetMeta, swatch } from './common'
@@ -30,7 +30,7 @@ function Road({ site, mm }: { site: Site; mm: (v: number) => number }) {
         strokeWidth={mm(0.6)}
         strokeDasharray={`${mm(5)} ${mm(3)}`}
       />
-      <Label x={cx} y={cy - mm(2)} text={`${formatFeet(ROAD_WIDTH)} WIDE ROAD`} mm={mm} size={2.6} weight={700} color={INK.mid} rotate={horizontalFront ? 0 : -90} />
+      <Label x={cx} y={cy - mm(2)} text={`${formatFeet(site.roadWidth)} WIDE ROAD`} mm={mm} size={2.6} weight={700} color={INK.mid} rotate={horizontalFront ? 0 : -90} />
     </g>
   )
 }
@@ -170,7 +170,7 @@ export function SiteLayoutSheet(props: SheetProps) {
                 [
                   ['Plot size', `${formatFeet(set.plot.width)} × ${formatFeet(set.plot.height)}`],
                   ['Road facing', set.plot.facing.toUpperCase()],
-                  ['Road width', formatFeet(ROAD_WIDTH)],
+                  ['Road width', formatFeet(site.roadWidth)],
                   ['Floors', `G + ${set.models.length - 1}`],
                   ['Gate width', formatFeet(site.gateWidth)],
                 ],

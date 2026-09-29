@@ -96,7 +96,8 @@ function buildCandidate(plot: Plot, brief: ProjectBrief, program: ProgramVariant
   const frame = footprintFor(env, planned, layout.align, layout.passage, maxFootprint)
   const programs = planned.map((p) => rebalance(p, frame.length))
   const depths = bandDepths(programs, frame.depth, layout.passage)
-  return programs.map((floor) => {
+  const suites = new Set(programs.flatMap((p) => p.rooms.filter((r) => r.attachedBath).map((r) => `gen-${p.level}-${r.key}`)))
+  const floors = programs.map((floor): Floor => {
     const rooms: Room[] = layoutFloor(floor, frame, depths, layout)
       .filter((p) => p.rect.a >= 2 && p.rect.d >= 2)
       .map((p) => {
@@ -133,6 +134,18 @@ function buildCandidate(plot: Plot, brief: ProjectBrief, program: ProgramVariant
       guides: { vertical: [], horizontal: [] },
     }
   })
+  nameMasterLargest(floors, suites)
+  return floors
+}
+
+/** Rooms come out in whatever sizes fit, so the master bedroom is whichever en-suite turned out largest. */
+function nameMasterLargest(floors: Floor[], suites: Set<string>) {
+  const bedrooms = floors.flatMap((f) => f.rooms).filter((r) => r.type === 'bedroom' && suites.has(r.id))
+  const master = bedrooms.find((r) => r.name === 'Master Bedroom')
+  const largest = bedrooms.reduce<Room | null>((best, r) => (!best || r.width * r.height > best.width * best.height ? r : best), null)
+  if (master && largest && largest !== master && largest.width * largest.height > master.width * master.height) {
+    ;[master.name, largest.name] = [largest.name, master.name]
+  }
 }
 
 /** Share of each upper floor's rooms that sit over a ground-floor room (not over open ground). */

@@ -3,7 +3,10 @@ import { type Rect, EXTERIOR_WALL, frontSide, unionRect } from './geometry'
 
 /** Site-level layout shared by the site plan sheets and the 3D landscape model. */
 
+/** Road width when the brief doesn't give one, ft. */
 export const ROAD_WIDTH = 24
+/** Wider roads are drawn cut short at this width so the plot stays the focus. */
+const MAX_DRAWN_ROAD = 40
 const GATE_WIDTH = 10
 export const COMPOUND = 0.5
 
@@ -12,11 +15,13 @@ export function siteContext(set: DrawingSet) {
   const ground = set.models[0]
   const front = frontSide(plot)
   const plotRect: Rect = { x: 0, y: 0, width: plot.width, height: plot.height }
+  const roadWidth = set.brief?.roadWidthFt ?? ROAD_WIDTH
+  const drawn = Math.min(roadWidth, MAX_DRAWN_ROAD)
   const road: Rect = {
-    N: { x: -8, y: -ROAD_WIDTH, width: plot.width + 16, height: ROAD_WIDTH },
-    S: { x: -8, y: plot.height, width: plot.width + 16, height: ROAD_WIDTH },
-    E: { x: plot.width, y: -8, width: ROAD_WIDTH, height: plot.height + 16 },
-    W: { x: -ROAD_WIDTH, y: -8, width: ROAD_WIDTH, height: plot.height + 16 },
+    N: { x: -8, y: -drawn, width: plot.width + 16, height: drawn },
+    S: { x: -8, y: plot.height, width: plot.width + 16, height: drawn },
+    E: { x: plot.width, y: -8, width: drawn, height: plot.height + 16 },
+    W: { x: -drawn, y: -8, width: drawn, height: plot.height + 16 },
   }[front]
   const horizontalFront = front === 'N' || front === 'S'
   const frontLength = horizontalFront ? plot.width : plot.height
@@ -26,7 +31,7 @@ export function siteContext(set: DrawingSet) {
   const gateStart = Math.min(Math.max(0.5, anchor - gateWidth / 2), frontLength - gateWidth - 0.5)
   const footprint = ground?.footprint ?? null
   const bounds = unionRect([plotRect, road])!
-  return { plot, ground, front, plotRect, road, horizontalFront, gateStart, gateWidth, footprint, bounds }
+  return { plot, ground, front, plotRect, road, roadWidth, horizontalFront, gateStart, gateWidth, footprint, bounds }
 }
 
 export type Site = ReturnType<typeof siteContext>
