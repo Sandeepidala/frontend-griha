@@ -37,9 +37,6 @@ export interface Room {
   notes: string
 }
 
-/** The subset of Room the backend persists; everything else is filled with client defaults on load. */
-export type RoomRecord = Pick<Room, 'id' | 'name' | 'type' | 'x' | 'y' | 'width' | 'height'>
-
 export interface Setbacks {
   front: number
   rear: number

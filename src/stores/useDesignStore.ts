@@ -1,32 +1,25 @@
 import { create } from 'zustand'
 import { ApiError } from '@/lib/apiClient'
+import * as floorsApi from '@/lib/floorsApi'
 import * as projectsApi from '@/lib/projectsApi'
 import * as roomsApi from '@/lib/roomsApi'
+import type { FloorPlacement } from '@/lib/floorsApi'
+import type { RoomFields } from '@/lib/roomsApi'
 import { toast } from '@/stores/useToastStore'
-import type { Floor, FloorFinish, Guides, Plot, Room, RoomRecord, SelectionRef } from '@/types/design'
+import type { Floor, FloorFinish, Guides, Plot, Room, SelectionRef } from '@/types/design'
 
 const DEFAULT_WALL_HEIGHT = 9
 const DEFAULT_FLOOR_FINISH: FloorFinish = 'tile'
 const FLOOR_TO_FLOOR_HEIGHT = 10
-
-/**
- * The backend has no notion of floors yet: a project's saved rooms load onto this floor, and only
- * this floor's rooms (name, type, position and size) are saved back. Other floors are local-only.
- */
-const GROUND_FLOOR_ID = 'ground'
 const SAVE_DEBOUNCE_MS = 500
-const PERSISTED_ROOM_FIELDS = ['name', 'type', 'x', 'y', 'width', 'height'] as const
-
-type RoomPatch = Partial<Omit<RoomRecord, 'id'>>
+/** Stands in until a project's floors load, and for editing without a project. */
+const PLACEHOLDER_FLOOR_ID = 'ground'
 
 function createId() {
   return typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `id-${Date.now()}-${Math.random().toString(36).slice(2)}`
 }
 
-type RoomInput = Pick<Room, 'id' | 'name' | 'type' | 'x' | 'y' | 'width' | 'height'> &
-  Partial<Pick<Room, 'wallHeight' | 'floorFinish' | 'color'>>
-
-function room(input: RoomInput): Room {
+function roomFields(input: Pick<Room, 'name' | 'type' | 'x' | 'y' | 'width' | 'height'>): RoomFields {
   return {
     rotation: 0,
     wallHeight: DEFAULT_WALL_HEIGHT,
@@ -45,19 +38,27 @@ function emptyGuides(): Guides {
   return { vertical: [], horizontal: [] }
 }
 
-function groundFloor(rooms: Room[]): Floor {
+function emptyFloor(id: string, placement: FloorPlacement): Floor {
   return {
-    id: GROUND_FLOOR_ID,
-    name: 'Ground Floor',
-    level: 0,
-    elevation: 0,
-    rooms,
+    id,
+    ...placement,
+    rooms: [],
     wallOverrides: {},
     openings: [],
     furniture: [],
     staircases: [],
     guides: emptyGuides(),
   }
+}
+
+function placeholderFloor(): Floor {
+  return emptyFloor(PLACEHOLDER_FLOOR_ID, { name: 'Ground Floor', level: 0, elevation: 0 })
+}
+
+function floorAbove(floors: Floor[]) {
+  const topElevation = Math.max(...floors.map((f) => f.elevation))
+  const maxLevel = Math.max(...floors.map((f) => f.level))
+  return { level: maxLevel + 1, elevation: topElevation + FLOOR_TO_FLOOR_HEIGHT }
 }
 
 const DEFAULT_PLOT: Plot = {
@@ -97,9 +98,9 @@ interface DesignState {
   addGuide: (axis: keyof Guides, position: number) => void
   removeGuide: (axis: keyof Guides, position: number) => void
   clearGuides: () => void
-  addFloor: () => void
-  removeFloor: (id: string) => void
-  duplicateFloor: (id: string) => void
+  addFloor: () => Promise<void>
+  removeFloor: (id: string) => Promise<void>
+  duplicateFloor: (id: string) => Promise<void>
   setActiveFloorId: (id: string) => void
   setViewMode: (mode: ViewMode) => void
   zoomIn: () => void
@@ -130,52 +131,85 @@ function mapFloor(floors: Floor[], floorId: string, fn: (floor: Floor) => Floor)
   return floors.map((floor) => (floor.id === floorId ? fn(floor) : floor))
 }
 
-function persistedChanges(before: Room, after: Room): RoomPatch {
+function changedFields(before: Room, after: Room): Partial<RoomFields> {
   return Object.fromEntries(
-    PERSISTED_ROOM_FIELDS.filter((key) => before[key] !== after[key]).map((key) => [key, after[key]]),
-  ) as RoomPatch
+    (Object.keys(after) as (keyof Room)[])
+      .filter((key) => key !== 'id' && before[key] !== after[key])
+      .map((key) => [key, after[key]]),
+  ) as Partial<RoomFields>
 }
 
-// Canvas drags and text fields fire updates in bursts, so saves are batched per room.
-const pendingRoomSaves = new Map<string, { patch: RoomPatch; timer: number }>()
+function errorMessage(err: unknown, fallback: string) {
+  return err instanceof ApiError ? err.message : fallback
+}
 
-function queueRoomSave(projectId: string, target: Room, patch: RoomPatch) {
+// Canvas drags, text fields and guide clicks fire updates in bursts, so saves are batched per record.
+const pendingSaves = new Map<string, { patch: object; timer: number; send: () => Promise<void> }>()
+
+function queueSave<T extends object>(key: string, patch: T, send: (merged: T) => Promise<unknown>, failure: string) {
   if (Object.keys(patch).length === 0) return
-  const pending = pendingRoomSaves.get(target.id)
+  const pending = pendingSaves.get(key)
   if (pending) window.clearTimeout(pending.timer)
-  const merged = { ...pending?.patch, ...patch }
-  const timer = window.setTimeout(() => {
-    pendingRoomSaves.delete(target.id)
-    roomsApi
-      .updateRoom(projectId, target.id, merged)
-      .catch(() => toast.danger(`Couldn't save changes to ${target.name}.`))
-  }, SAVE_DEBOUNCE_MS)
-  pendingRoomSaves.set(target.id, { patch: merged, timer })
+  const merged = { ...(pending?.patch as T | undefined), ...patch }
+  const run = async () => {
+    pendingSaves.delete(key)
+    try {
+      await send(merged)
+    } catch {
+      toast.danger(failure)
+    }
+  }
+  pendingSaves.set(key, { patch: merged, timer: window.setTimeout(run, SAVE_DEBOUNCE_MS), send: run })
 }
 
-function cancelRoomSave(roomId: string) {
-  const pending = pendingRoomSaves.get(roomId)
+function cancelSave(key: string) {
+  const pending = pendingSaves.get(key)
   if (!pending) return
   window.clearTimeout(pending.timer)
-  pendingRoomSaves.delete(roomId)
+  pendingSaves.delete(key)
 }
 
-let pendingPlotSave: number | undefined
+/** Sends every batched save now, e.g. before the server copies data it may not have yet. */
+async function flushSaves() {
+  const pending = [...pendingSaves.values()]
+  pending.forEach(({ timer }) => window.clearTimeout(timer))
+  await Promise.all(pending.map(({ send }) => send()))
+}
+
+function queueRoomSave(projectId: string, target: Room, patch: Partial<RoomFields>) {
+  queueSave(
+    `room:${target.id}`,
+    patch,
+    (merged) => roomsApi.updateRoom(projectId, target.id, merged),
+    `Couldn't save changes to ${target.name}.`,
+  )
+}
+
+function queueGuidesSave({ projectId, floors, activeFloorId }: DesignState) {
+  const floor = floors.find((f) => f.id === activeFloorId)
+  if (!projectId || !floor) return
+  queueSave(
+    `floor:${floor.id}`,
+    { guides: floor.guides },
+    (merged) => floorsApi.updateFloor(projectId, floor.id, merged),
+    `Couldn't save the guides on ${floor.name}.`,
+  )
+}
 
 function queuePlotSave(projectId: string, plot: Plot) {
-  window.clearTimeout(pendingPlotSave)
-  pendingPlotSave = window.setTimeout(() => {
-    projectsApi
-      .updateProjectPlot(projectId, { plotWidth: plot.width, plotHeight: plot.height, facing: plot.facing })
-      .catch(() => toast.danger("Couldn't save the plot settings."))
-  }, SAVE_DEBOUNCE_MS)
+  queueSave(
+    'plot',
+    { plotWidth: plot.width, plotHeight: plot.height, facing: plot.facing },
+    (merged) => projectsApi.updateProjectPlot(projectId, merged),
+    "Couldn't save the plot settings.",
+  )
 }
 
 export const useDesignStore = create<DesignState>((set, get) => ({
   projectId: null,
   plot: DEFAULT_PLOT,
-  floors: [groundFloor([])],
-  activeFloorId: GROUND_FLOOR_ID,
+  floors: [placeholderFloor()],
+  activeFloorId: PLACEHOLDER_FLOOR_ID,
   selection: null,
   viewMode: '2d',
   zoom: 1,
@@ -185,6 +219,8 @@ export const useDesignStore = create<DesignState>((set, get) => ({
   error: null,
 
   loadProject: async (projectId) => {
+    // Edits still batched from the previous project would otherwise be dropped or read back stale.
+    void flushSaves()
     set({
       projectId,
       status: 'loading',
@@ -195,15 +231,16 @@ export const useDesignStore = create<DesignState>((set, get) => ({
     try {
       const project = await projectsApi.getProject(projectId)
       if (get().projectId !== projectId) return
+      const floors = project.floors.length > 0 ? project.floors : [placeholderFloor()]
       set({
         plot: { ...DEFAULT_PLOT, width: project.plotWidth, height: project.plotHeight, facing: project.facing },
-        floors: [groundFloor(project.rooms.map(room))],
-        activeFloorId: GROUND_FLOOR_ID,
+        floors,
+        activeFloorId: (floors.find((f) => f.level === 0) ?? floors[0]).id,
         status: 'idle',
       })
     } catch (err) {
       if (get().projectId !== projectId) return
-      set({ status: 'error', error: err instanceof ApiError ? err.message : 'Could not reach the server.' })
+      set({ status: 'error', error: errorMessage(err, 'Could not reach the server.') })
     }
   },
 
@@ -213,26 +250,26 @@ export const useDesignStore = create<DesignState>((set, get) => ({
     const { plot, projectId, activeFloorId } = get()
     const width = 10
     const height = 10
-    const input = {
+    const fields = roomFields({
       name: 'New Room',
-      type: 'living' as const,
+      type: 'living',
       x: clampToPlot((plot.width - width) / 2, width, plot.width),
       y: clampToPlot((plot.height - height) / 2, height, plot.height),
       width,
       height,
-    }
+    })
 
     let newRoom: Room
-    if (projectId && activeFloorId === GROUND_FLOOR_ID) {
+    if (projectId) {
       try {
-        newRoom = room(await roomsApi.createRoom(projectId, input))
+        newRoom = await roomsApi.createRoom(projectId, activeFloorId, fields)
       } catch (err) {
-        toast.danger(err instanceof ApiError ? err.message : "Couldn't add the room.")
+        toast.danger(errorMessage(err, "Couldn't add the room."))
         return
       }
       if (get().projectId !== projectId) return
     } else {
-      newRoom = room({ id: createId(), ...input })
+      newRoom = { id: createId(), ...fields }
     }
 
     set((state) => ({
@@ -257,7 +294,7 @@ export const useDesignStore = create<DesignState>((set, get) => ({
       })),
     }))
 
-    if (projectId && activeFloorId === GROUND_FLOOR_ID) queueRoomSave(projectId, after, persistedChanges(before, after))
+    if (projectId) queueRoomSave(projectId, after, changedFields(before, after))
   },
 
   removeRoom: async (id) => {
@@ -265,14 +302,14 @@ export const useDesignStore = create<DesignState>((set, get) => ({
     const target = floors.find((f) => f.id === activeFloorId)?.rooms.find((r) => r.id === id)
     if (!target) return
 
-    if (projectId && activeFloorId === GROUND_FLOOR_ID) {
-      cancelRoomSave(id)
+    if (projectId) {
       try {
         await roomsApi.deleteRoom(projectId, id)
       } catch (err) {
-        toast.danger(err instanceof ApiError ? err.message : `Couldn't remove ${target.name}.`)
+        toast.danger(errorMessage(err, `Couldn't remove ${target.name}.`))
         return
       }
+      cancelSave(`room:${id}`)
       if (get().projectId !== projectId) return
     }
 
@@ -298,13 +335,15 @@ export const useDesignStore = create<DesignState>((set, get) => ({
     if (plot.width !== previousPlot.width || plot.height !== previousPlot.height || plot.facing !== previousPlot.facing) {
       queuePlotSave(projectId, plot)
     }
-    // Shrinking the plot can push ground-floor rooms back inside it; those moves need saving too.
-    const beforeRooms = floors.find((f) => f.id === GROUND_FLOOR_ID)?.rooms ?? []
-    const afterRooms = nextFloors.find((f) => f.id === GROUND_FLOOR_ID)?.rooms ?? []
-    afterRooms.forEach((after, index) => queueRoomSave(projectId, after, persistedChanges(beforeRooms[index], after)))
+    // Shrinking the plot can push rooms back inside it; those moves need saving too.
+    nextFloors.forEach((floor, floorIndex) =>
+      floor.rooms.forEach((after, roomIndex) =>
+        queueRoomSave(projectId, after, changedFields(floors[floorIndex].rooms[roomIndex], after)),
+      ),
+    )
   },
 
-  addGuide: (axis, position) =>
+  addGuide: (axis, position) => {
     set((state) => {
       const rounded = Math.round(position * 10) / 10
       return {
@@ -313,9 +352,11 @@ export const useDesignStore = create<DesignState>((set, get) => ({
           return { ...floor, guides: { ...floor.guides, [axis]: [...floor.guides[axis], rounded].sort((a, b) => a - b) } }
         }),
       }
-    }),
+    })
+    queueGuidesSave(get())
+  },
 
-  removeGuide: (axis, position) =>
+  removeGuide: (axis, position) => {
     set((state) => ({
       floors: mapFloor(state.floors, state.activeFloorId, (floor) => ({
         ...floor,
@@ -324,64 +365,90 @@ export const useDesignStore = create<DesignState>((set, get) => ({
           [axis]: floor.guides[axis].filter((value) => Math.abs(value - position) > GUIDE_MERGE_TOLERANCE_FT),
         },
       })),
-    })),
+    }))
+    queueGuidesSave(get())
+  },
 
-  clearGuides: () =>
+  clearGuides: () => {
     set((state) => ({
       floors: mapFloor(state.floors, state.activeFloorId, (floor) => ({ ...floor, guides: emptyGuides() })),
-    })),
+    }))
+    queueGuidesSave(get())
+  },
 
-  addFloor: () =>
-    set((state) => {
-      const topElevation = Math.max(...state.floors.map((f) => f.elevation))
-      const maxLevel = Math.max(...state.floors.map((f) => f.level))
-      const newFloor: Floor = {
-        id: createId(),
-        name: `Floor ${maxLevel + 2}`,
-        level: maxLevel + 1,
-        elevation: topElevation + FLOOR_TO_FLOOR_HEIGHT,
-        rooms: [],
-        wallOverrides: {},
-        openings: [],
-        furniture: [],
-        staircases: [],
-        guides: emptyGuides(),
+  addFloor: async () => {
+    const { floors, projectId } = get()
+    const { level, elevation } = floorAbove(floors)
+    const placement = { name: `Floor ${level + 1}`, level, elevation }
+
+    let newFloor: Floor
+    if (projectId) {
+      try {
+        newFloor = await floorsApi.createFloor(projectId, placement)
+      } catch (err) {
+        toast.danger(errorMessage(err, "Couldn't add the floor."))
+        return
       }
-      return { floors: [...state.floors, newFloor], activeFloorId: newFloor.id, selection: null }
-    }),
-
-  removeFloor: (id) => {
-    // Deleting it locally would leave its rooms in the project, and they'd reappear on the next load.
-    if (id === GROUND_FLOOR_ID && get().projectId) {
-      toast.info("The ground floor holds this project's saved rooms, so it can't be removed.")
-      return
+      if (get().projectId !== projectId) return
+    } else {
+      newFloor = emptyFloor(createId(), placement)
     }
+
+    set((state) => ({ floors: [...state.floors, newFloor], activeFloorId: newFloor.id, selection: null }))
+  },
+
+  removeFloor: async (id) => {
+    const { floors, projectId } = get()
+    const target = floors.find((f) => f.id === id)
+    if (!target || floors.length <= 1) return
+
+    if (projectId) {
+      try {
+        await floorsApi.deleteFloor(projectId, id)
+      } catch (err) {
+        toast.danger(errorMessage(err, `Couldn't delete ${target.name}.`))
+        return
+      }
+      cancelSave(`floor:${id}`)
+      target.rooms.forEach((r) => cancelSave(`room:${r.id}`))
+      if (get().projectId !== projectId) return
+    }
+
     set((state) => {
-      if (state.floors.length <= 1) return state
-      const floors = state.floors.filter((f) => f.id !== id)
+      const remaining = state.floors.filter((f) => f.id !== id)
+      if (remaining.length === 0) return state
       const wasActive = state.activeFloorId === id
       return {
-        floors,
-        activeFloorId: wasActive ? floors[0].id : state.activeFloorId,
+        floors: remaining,
+        activeFloorId: wasActive ? remaining[0].id : state.activeFloorId,
         selection: wasActive ? null : state.selection,
       }
     })
   },
 
-  duplicateFloor: (id) =>
-    set((state) => {
-      const source = state.floors.find((f) => f.id === id)
-      if (!source) return state
-      const topElevation = Math.max(...state.floors.map((f) => f.elevation))
-      const maxLevel = Math.max(...state.floors.map((f) => f.level))
-      const roomIdMap = new Map(source.rooms.map((r) => [r.id, createId()]))
-      const clone: Floor = {
+  duplicateFloor: async (id) => {
+    const { floors, projectId } = get()
+    const source = floors.find((f) => f.id === id)
+    if (!source) return
+    const placement = { name: `${source.name} Copy`, ...floorAbove(floors) }
+
+    let clone: Floor
+    if (projectId) {
+      // The server copies what it has stored, so batched edits to this floor must land first.
+      await flushSaves()
+      try {
+        clone = await floorsApi.duplicateFloor(projectId, id, placement)
+      } catch (err) {
+        toast.danger(errorMessage(err, `Couldn't duplicate ${source.name}.`))
+        return
+      }
+      if (get().projectId !== projectId) return
+    } else {
+      clone = {
         ...source,
         id: createId(),
-        name: `${source.name} Copy`,
-        level: maxLevel + 1,
-        elevation: topElevation + FLOOR_TO_FLOOR_HEIGHT,
-        rooms: source.rooms.map((r) => ({ ...r, id: roomIdMap.get(r.id)! })),
+        ...placement,
+        rooms: source.rooms.map((r) => ({ ...r, id: createId() })),
         // wall overrides/openings/staircases key off wall & room ids that don't carry over cleanly
         // to the cloned rooms, so they're intentionally dropped rather than copied stale.
         wallOverrides: {},
@@ -390,8 +457,10 @@ export const useDesignStore = create<DesignState>((set, get) => ({
         staircases: [],
         guides: { vertical: [...source.guides.vertical], horizontal: [...source.guides.horizontal] },
       }
-      return { floors: [...state.floors, clone], activeFloorId: clone.id, selection: null }
-    }),
+    }
+
+    set((state) => ({ floors: [...state.floors, clone], activeFloorId: clone.id, selection: null }))
+  },
 
   setActiveFloorId: (id) => set({ activeFloorId: id, selection: null }),
 

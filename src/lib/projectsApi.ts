@@ -1,5 +1,7 @@
 import { apiRequest } from './apiClient'
+import { mapFloor, type FloorDto } from './floorsApi'
 import { formatRelativeTime } from './format'
+import { mapRoom, type RoomDto } from './roomsApi'
 import type {
   CulturalPreference,
   NewProjectInput,
@@ -8,7 +10,7 @@ import type {
   ProjectSummary,
   ActivityLogEntry,
 } from '@/types/project'
-import type { Plot, RoomRecord, RoomType } from '@/types/design'
+import type { Plot } from '@/types/design'
 
 interface ProjectDto {
   id: string
@@ -26,18 +28,8 @@ interface ProjectDto {
   updated_at: string
 }
 
-interface RoomDto {
-  id: string
-  project_id: string
-  name: string
-  type: RoomType
-  x: number
-  y: number
-  width: number
-  height: number
-}
-
 interface ProjectDetailDto extends ProjectDto {
+  floors: FloorDto[]
   rooms: RoomDto[]
 }
 
@@ -64,10 +56,6 @@ function mapProject(dto: ProjectDto): ProjectSummary {
     createdAt: dto.created_at,
     updatedAt: dto.updated_at,
   }
-}
-
-function mapRoom(dto: RoomDto): RoomRecord {
-  return { id: dto.id, name: dto.name, type: dto.type, x: dto.x, y: dto.y, width: dto.width, height: dto.height }
 }
 
 function mapActivity(dto: ActivityDto): ActivityLogEntry {
@@ -99,7 +87,13 @@ export async function createProject(input: NewProjectInput): Promise<ProjectSumm
 
 export async function getProject(projectId: string): Promise<ProjectDetail> {
   const dto = await apiRequest<ProjectDetailDto>(`/projects/${projectId}`)
-  return { ...mapProject(dto), rooms: dto.rooms.map(mapRoom) }
+  const floors = dto.floors.map((floor) =>
+    mapFloor(
+      floor,
+      dto.rooms.filter((room) => room.floor_id === floor.id).map(mapRoom),
+    ),
+  )
+  return { ...mapProject(dto), floors }
 }
 
 export async function updateProjectPlot(
