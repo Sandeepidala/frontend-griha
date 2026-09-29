@@ -1,6 +1,6 @@
+import type { ProjectBrief } from './brief'
 import type { Floor, LengthUnit, Plot, Setbacks } from './design'
 
-export type CulturalPreference = 'hindu' | 'neutral' | 'muslim'
 export type ProjectStatus = 'draft' | 'generating' | 'in_review' | 'ready'
 
 export interface ProjectSummary {
@@ -13,8 +13,7 @@ export interface ProjectSummary {
   setbacks: Setbacks
   budget: number
   turnkey: boolean
-  culturalPreference: CulturalPreference
-  specialRooms: string[]
+  brief: ProjectBrief
   notes?: string
   status: ProjectStatus
   createdAt: string
@@ -23,6 +22,12 @@ export interface ProjectSummary {
 
 /** Units and setbacks start at the backend's defaults and are set in the plan editor. */
 export type NewProjectInput = Omit<ProjectSummary, 'id' | 'status' | 'createdAt' | 'updatedAt' | 'units' | 'setbacks'>
+
+/** What the brief wizard edits on an existing project. */
+export type ProjectBriefUpdate = Pick<
+  ProjectSummary,
+  'name' | 'plotWidth' | 'plotHeight' | 'facing' | 'budget' | 'turnkey' | 'brief' | 'notes'
+>
 
 export interface ProjectDetail extends ProjectSummary {
   floors: Floor[]

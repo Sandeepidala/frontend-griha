@@ -1,10 +1,11 @@
-import { Columns2, FileStack, Grid3x3, Minus, Plus, Ruler, Scaling, View } from 'lucide-react'
+import { ClipboardList, Columns2, FileStack, Grid3x3, Minus, Plus, Ruler, Scaling, View } from 'lucide-react'
 import { FloorSwitcher } from '@/components/canvas/FloorSwitcher'
 import { Divider } from '@/components/ui/Divider'
 import { IconButton } from '@/components/ui/IconButton'
 import { SegmentedControl } from '@/components/ui/SegmentedControl'
 import { Tooltip } from '@/components/ui/Tooltip'
 import { useActiveFloor, useDesignStore, type ViewMode } from '@/stores/useDesignStore'
+import { useProjectsStore } from '@/stores/useProjectsStore'
 
 const VIEW_OPTIONS: { value: ViewMode; label: string; icon: typeof View }[] = [
   { value: '2d', label: '2D Plan', icon: Scaling },
@@ -23,6 +24,8 @@ export function CanvasToolbar() {
   const gridVisible = useDesignStore((state) => state.gridVisible)
   const toggleGrid = useDesignStore((state) => state.toggleGrid)
   const clearGuides = useDesignStore((state) => state.clearGuides)
+  const projectId = useDesignStore((state) => state.projectId)
+  const openBriefEditor = useProjectsStore((state) => state.openBriefEditor)
   const guides = useActiveFloor().guides
   const hasGuides = guides.vertical.length > 0 || guides.horizontal.length > 0
   // Grid, guides and zoom drive the 2D plan canvas only.
@@ -35,6 +38,14 @@ export function CanvasToolbar() {
       <Divider orientation="vertical" className="h-6" />
 
       <SegmentedControl value={viewMode} onChange={setViewMode} options={VIEW_OPTIONS} />
+
+      {projectId && (
+        <Tooltip content="Plot, budget, rooms and style for this project">
+          <IconButton label="Edit brief" size="sm" variant="ghost" onClick={() => openBriefEditor(projectId)}>
+            <ClipboardList className="size-4" />
+          </IconButton>
+        </Tooltip>
+      )}
 
       <div className="flex-1" />
 

@@ -1,5 +1,6 @@
+import { DEFAULT_BRIEF } from '../brief'
 import { DEMO_EMAIL, DEMO_PASSWORD } from '../dataMode'
-import type { ActivityDto, ProjectDto } from '../projectsApi'
+import { briefToDto, type ActivityDto, type BriefDto, type ProjectDto } from '../projectsApi'
 import type { FloorDto } from '../floorsApi'
 import type { RoomDto } from '../roomsApi'
 import type { UserDto } from '../authApi'
@@ -43,11 +44,15 @@ export const PROJECT_DEFAULTS = {
   setback_left: 2,
   setback_right: 2,
   turnkey: false,
-  cultural_preference: 'neutral',
-  special_rooms: [],
+  brief: briefToDto(DEFAULT_BRIEF),
   notes: null,
   status: 'draft',
 } satisfies Partial<ProjectDto>
+
+/** Fills anything a stored or submitted brief leaves out, as the backend's defaults do. */
+export function completeBrief(brief: Partial<BriefDto> | undefined): BriefDto {
+  return { ...PROJECT_DEFAULTS.brief, ...brief }
+}
 
 export const ROOM_DEFAULTS = {
   rotation: 0,
@@ -94,8 +99,8 @@ const SAMPLE_HOUSE: { name: string; level: number; rooms: SampleRoom[] }[] = [
 
 type SampleProject = Pick<
   ProjectDto,
-  'name' | 'plot_width' | 'plot_height' | 'facing' | 'budget' | 'turnkey' | 'cultural_preference' | 'special_rooms' | 'status' | 'created_at' | 'updated_at'
->
+  'name' | 'plot_width' | 'plot_height' | 'facing' | 'budget' | 'turnkey' | 'status' | 'created_at' | 'updated_at'
+> & { brief: Partial<BriefDto> }
 
 const SAMPLE_PROJECTS: SampleProject[] = [
   {
@@ -105,8 +110,19 @@ const SAMPLE_PROJECTS: SampleProject[] = [
     facing: 'north',
     budget: 4500000,
     turnkey: false,
-    cultural_preference: 'hindu',
-    special_rooms: ['Pooja / prayer room', 'Store room'],
+    brief: {
+      state: 'Karnataka',
+      city: 'Bengaluru',
+      floors: 2,
+      bedrooms: 5,
+      bathrooms: 2,
+      parking_cars: 1,
+      extra_rooms: ['quiet_room', 'store_room'],
+      family_size: 5,
+      family_type: 'joint',
+      needs_ground_floor_bedroom: true,
+      style: 'south_indian',
+    },
     status: 'ready',
     created_at: '2026-09-02T09:00:00.000Z',
     updated_at: '2026-09-14T15:30:00.000Z',
@@ -118,8 +134,19 @@ const SAMPLE_PROJECTS: SampleProject[] = [
     facing: 'east',
     budget: 8500000,
     turnkey: true,
-    cultural_preference: 'neutral',
-    special_rooms: ['Home office'],
+    brief: {
+      corner_plot: true,
+      state: 'Telangana',
+      city: 'Hyderabad',
+      floors: 2,
+      bedrooms: 4,
+      bathrooms: 4,
+      kitchen_type: 'open',
+      parking_cars: 2,
+      extra_rooms: ['home_office', 'guest_room'],
+      style: 'contemporary',
+      vastu: false,
+    },
     status: 'in_review',
     created_at: '2026-08-20T09:00:00.000Z',
     updated_at: '2026-09-13T11:10:00.000Z',
@@ -131,8 +158,19 @@ const SAMPLE_PROJECTS: SampleProject[] = [
     facing: 'south',
     budget: 12000000,
     turnkey: false,
-    cultural_preference: 'hindu',
-    special_rooms: ['Pooja / prayer room', 'Servant quarters'],
+    brief: {
+      state: 'Tamil Nadu',
+      city: 'Coimbatore',
+      floors: 2,
+      bedrooms: 5,
+      bathrooms: 4,
+      parking_cars: 2,
+      extra_rooms: ['quiet_room', 'servant_quarters', 'utility_room'],
+      family_size: 7,
+      family_type: 'joint',
+      needs_ground_floor_bedroom: true,
+      style: 'traditional',
+    },
     status: 'draft',
     created_at: '2026-09-10T09:00:00.000Z',
     updated_at: '2026-09-10T09:00:00.000Z',
@@ -184,7 +222,13 @@ function addSampleHouse(db: DemoDb, projectId: string) {
 export function addSamplePortfolio(db: DemoDb, ownerId: string, now = Date.now()) {
   const idsByName = new Map<string, string>()
   for (const sample of SAMPLE_PROJECTS) {
-    const project: DemoProject = { ...PROJECT_DEFAULTS, ...sample, id: createId(), owner_id: ownerId }
+    const project: DemoProject = {
+      ...PROJECT_DEFAULTS,
+      ...sample,
+      brief: completeBrief(sample.brief),
+      id: createId(),
+      owner_id: ownerId,
+    }
     db.projects.push(project)
     idsByName.set(project.name, project.id)
     addSampleHouse(db, project.id)

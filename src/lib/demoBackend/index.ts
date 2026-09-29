@@ -2,13 +2,14 @@ import { ApiError } from '../apiError'
 import type { HttpMethod } from '../apiClient'
 import type { AuthResponseDto, UserDto } from '../authApi'
 import type { FloorDto, FloorWithRoomsDto } from '../floorsApi'
-import type { ProjectDetailDto, ProjectDto } from '../projectsApi'
+import type { BriefDto, ProjectDetailDto, ProjectDto } from '../projectsApi'
 import type { RoomDto } from '../roomsApi'
 import {
   GROUND_FLOOR_NAME,
   PROJECT_DEFAULTS,
   ROOM_DEFAULTS,
   addSamplePortfolio,
+  completeBrief,
   createId,
   createSeedDb,
   type DemoDb,
@@ -32,7 +33,7 @@ function database(): DemoDb {
   if (db) return db
   try {
     const stored = localStorage.getItem(STORAGE_KEY)
-    if (stored) db = JSON.parse(stored) as DemoDb
+    if (stored) db = upgradeStoredProjects(JSON.parse(stored) as DemoDb)
   } catch {
     // unreadable or blocked storage: start over in memory
   }
@@ -41,6 +42,28 @@ function database(): DemoDb {
     persist()
   }
   return db
+}
+
+// Projects saved before the brief existed, converted the same way as backend migration 0004.
+const LEGACY_SPECIAL_ROOMS: Record<string, BriefDto['extra_rooms'][number]> = {
+  'Pooja / prayer room': 'quiet_room',
+  'Home office': 'home_office',
+  'Servant quarters': 'servant_quarters',
+  'Store room': 'store_room',
+}
+
+function upgradeStoredProjects(data: DemoDb): DemoDb {
+  for (const project of data.projects as (DemoProject & { cultural_preference?: string; special_rooms?: string[] })[]) {
+    if (project.brief) continue
+    const rooms = project.special_rooms ?? []
+    project.brief = completeBrief({
+      vastu: project.cultural_preference === 'hindu',
+      extra_rooms: [...new Set(rooms.flatMap((room) => LEGACY_SPECIAL_ROOMS[room] ?? []))],
+    })
+    delete project.cultural_preference
+    delete project.special_rooms
+  }
+  return data
 }
 
 function persist() {
@@ -170,11 +193,21 @@ const PROJECT_FIELDS = [
   'setback_right',
   'budget',
   'turnkey',
-  'cultural_preference',
-  'special_rooms',
+  'brief',
   'notes',
   'status',
 ] as const satisfies readonly (keyof ProjectDto)[]
+
+/** Like the backend: an explicit null only clears `notes`, and a brief is completed with defaults. */
+function projectChanges(body: Body): Partial<ProjectDto> {
+  const changes = pick<ProjectDto>(body, PROJECT_FIELDS)
+  for (const key of Object.keys(changes) as (keyof ProjectDto)[]) {
+    if (changes[key] === null && key !== 'notes') delete changes[key]
+  }
+  if (changes.name !== undefined && !String(changes.name).trim()) fail(422, 'Enter a project name.')
+  if (changes.brief) changes.brief = completeBrief(changes.brief)
+  return changes
+}
 
 function pick<T extends object>(body: Body, fields: readonly (keyof T)[]): Partial<T> {
   return Object.fromEntries(fields.filter((f) => body[f as string] !== undefined).map((f) => [f, body[f as string]])) as Partial<T>
@@ -203,8 +236,9 @@ function createProject(user: DemoUser, body: Body): ProjectDto {
   const timestamp = now()
   const project: DemoProject = {
     ...PROJECT_DEFAULTS,
-    ...(pick<ProjectDto>(body, PROJECT_FIELDS) as Omit<ProjectDto, 'id' | 'created_at' | 'updated_at'>),
+    ...(projectChanges(body) as Omit<ProjectDto, 'id' | 'created_at' | 'updated_at'>),
     name: requireString(body, 'name', 'Enter a project name.'),
+    brief: completeBrief(body.brief as Partial<BriefDto> | undefined),
     status: 'draft',
     id: createId(),
     owner_id: user.id,
@@ -362,7 +396,7 @@ function route(method: HttpMethod, segments: string[], body: Body, token: string
     if (!collection) {
       if (method === 'GET') return projectDetail(project)
       if (method === 'PATCH') {
-        Object.assign(project, pick<ProjectDto>(body, PROJECT_FIELDS), { updated_at: now() })
+        Object.assign(project, projectChanges(body), { updated_at: now() })
         return projectSummary(project)
       }
       if (method === 'DELETE') return deleteProject(project)

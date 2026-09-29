@@ -1,4 +1,4 @@
-import { ChevronDown, Plus } from 'lucide-react'
+import { ChevronDown, ClipboardList, Plus } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { Divider } from '@/components/ui/Divider'
 import { Popover } from '@/components/ui/Popover'
@@ -11,6 +11,7 @@ export function ProjectSwitcher() {
   const activeProjectId = useProjectsStore((state) => state.activeProjectId)
   const setActiveProject = useProjectsStore((state) => state.setActiveProject)
   const openNewProjectPanel = useProjectsStore((state) => state.openNewProjectPanel)
+  const openBriefEditor = useProjectsStore((state) => state.openBriefEditor)
   const navigate = useNavigate()
 
   const active = projects.find((project) => project.id === activeProjectId)
@@ -61,6 +62,19 @@ export function ProjectSwitcher() {
             ))}
           </div>
           <Divider className="my-1" />
+          {active && (
+            <button
+              type="button"
+              onClick={() => {
+                openBriefEditor(active.id)
+                close()
+              }}
+              className="flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-left text-sm font-medium text-text transition-colors hover:bg-surface-2"
+            >
+              <ClipboardList className="size-4" />
+              Edit brief — {active.name}
+            </button>
+          )}
           <button
             type="button"
             onClick={() => {

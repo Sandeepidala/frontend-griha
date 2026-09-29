@@ -1,7 +1,10 @@
 import { create } from 'zustand'
 import { ApiError } from '@/lib/apiClient'
 import * as projectsApi from '@/lib/projectsApi'
-import type { ActivityLogEntry, NewProjectInput, ProjectSummary } from '@/types/project'
+import type { ActivityLogEntry, NewProjectInput, ProjectBriefUpdate, ProjectSummary } from '@/types/project'
+
+/** The brief wizard either starts a new project or edits an existing project's brief. */
+export type BriefPanelState = { mode: 'create' } | { mode: 'edit'; projectId: string } | null
 
 interface ProjectsState {
   projects: ProjectSummary[]
@@ -10,12 +13,14 @@ interface ProjectsState {
   status: 'idle' | 'loading' | 'error'
   error: string | null
   hasLoaded: boolean
-  newProjectPanelOpen: boolean
+  briefPanel: BriefPanelState
   fetchProjects: () => Promise<void>
   createProject: (input: NewProjectInput) => Promise<ProjectSummary>
+  updateProjectBrief: (projectId: string, input: ProjectBriefUpdate) => Promise<ProjectSummary>
   setActiveProject: (id: string) => void
   openNewProjectPanel: () => void
-  closeNewProjectPanel: () => void
+  openBriefEditor: (projectId: string) => void
+  closeBriefPanel: () => void
   reset: () => void
 }
 
@@ -30,7 +35,7 @@ export const useProjectsStore = create<ProjectsState>((set, get) => ({
   status: 'idle',
   error: null,
   hasLoaded: false,
-  newProjectPanelOpen: false,
+  briefPanel: null,
 
   fetchProjects: async () => {
     set({ status: 'loading', error: null })
@@ -54,9 +59,16 @@ export const useProjectsStore = create<ProjectsState>((set, get) => ({
     return project
   },
 
+  updateProjectBrief: async (projectId, input) => {
+    const project = await projectsApi.updateProjectBrief(projectId, input)
+    set((state) => ({ projects: state.projects.map((p) => (p.id === projectId ? project : p)) }))
+    return project
+  },
+
   setActiveProject: (id) => set({ activeProjectId: id }),
-  openNewProjectPanel: () => set({ newProjectPanelOpen: true }),
-  closeNewProjectPanel: () => set({ newProjectPanelOpen: false }),
+  openNewProjectPanel: () => set({ briefPanel: { mode: 'create' } }),
+  openBriefEditor: (projectId) => set({ briefPanel: { mode: 'edit', projectId } }),
+  closeBriefPanel: () => set({ briefPanel: null }),
 
   reset: () =>
     set({ projects: [], activeProjectId: null, activityLog: [], status: 'idle', error: null, hasLoaded: false }),

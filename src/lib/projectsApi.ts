@@ -3,14 +3,76 @@ import { mapFloor, type FloorDto } from './floorsApi'
 import { formatRelativeTime } from './format'
 import { mapRoom, type RoomDto } from './roomsApi'
 import type {
-  CulturalPreference,
   NewProjectInput,
+  ProjectBriefUpdate,
   ProjectDetail,
   ProjectStatus,
   ProjectSummary,
   ActivityLogEntry,
 } from '@/types/project'
+import type { DesignStyle, ExtraRoom, FamilyType, KitchenType, PlotShape, ProjectBrief } from '@/types/brief'
 import type { LengthUnit, Plot } from '@/types/design'
+
+export interface BriefDto {
+  plot_shape: PlotShape
+  plot_shape_notes: string | null
+  corner_plot: boolean
+  state: string | null
+  city: string | null
+  floors: number
+  bedrooms: number
+  bathrooms: number
+  kitchen_type: KitchenType
+  parking_cars: number
+  extra_rooms: ExtraRoom[]
+  family_size: number
+  family_type: FamilyType
+  needs_ground_floor_bedroom: boolean
+  style: DesignStyle
+  vastu: boolean
+}
+
+function mapBrief(dto: BriefDto): ProjectBrief {
+  return {
+    plotShape: dto.plot_shape,
+    plotShapeNotes: dto.plot_shape_notes,
+    cornerPlot: dto.corner_plot,
+    state: dto.state,
+    city: dto.city,
+    floors: dto.floors,
+    bedrooms: dto.bedrooms,
+    bathrooms: dto.bathrooms,
+    kitchenType: dto.kitchen_type,
+    parkingCars: dto.parking_cars,
+    extraRooms: dto.extra_rooms,
+    familySize: dto.family_size,
+    familyType: dto.family_type,
+    needsGroundFloorBedroom: dto.needs_ground_floor_bedroom,
+    style: dto.style,
+    vastu: dto.vastu,
+  }
+}
+
+export function briefToDto(brief: ProjectBrief): BriefDto {
+  return {
+    plot_shape: brief.plotShape,
+    plot_shape_notes: brief.plotShapeNotes,
+    corner_plot: brief.cornerPlot,
+    state: brief.state,
+    city: brief.city,
+    floors: brief.floors,
+    bedrooms: brief.bedrooms,
+    bathrooms: brief.bathrooms,
+    kitchen_type: brief.kitchenType,
+    parking_cars: brief.parkingCars,
+    extra_rooms: brief.extraRooms,
+    family_size: brief.familySize,
+    family_type: brief.familyType,
+    needs_ground_floor_bedroom: brief.needsGroundFloorBedroom,
+    style: brief.style,
+    vastu: brief.vastu,
+  }
+}
 
 export interface ProjectDto {
   id: string
@@ -25,8 +87,7 @@ export interface ProjectDto {
   setback_right: number
   budget: number
   turnkey: boolean
-  cultural_preference: CulturalPreference
-  special_rooms: string[]
+  brief: BriefDto
   notes: string | null
   status: ProjectStatus
   created_at: string
@@ -56,8 +117,7 @@ function mapProject(dto: ProjectDto): ProjectSummary {
     setbacks: { front: dto.setback_front, rear: dto.setback_rear, left: dto.setback_left, right: dto.setback_right },
     budget: dto.budget,
     turnkey: dto.turnkey,
-    culturalPreference: dto.cultural_preference,
-    specialRooms: dto.special_rooms,
+    brief: mapBrief(dto.brief),
     notes: dto.notes ?? undefined,
     status: dto.status,
     createdAt: dto.created_at,
@@ -74,21 +134,27 @@ export async function listProjects(): Promise<ProjectSummary[]> {
   return dtos.map(mapProject)
 }
 
+function projectBody(input: NewProjectInput | ProjectBriefUpdate) {
+  return {
+    name: input.name,
+    plot_width: input.plotWidth,
+    plot_height: input.plotHeight,
+    facing: input.facing,
+    budget: input.budget,
+    turnkey: input.turnkey,
+    brief: briefToDto(input.brief),
+    notes: input.notes ?? null,
+  }
+}
+
 export async function createProject(input: NewProjectInput): Promise<ProjectSummary> {
-  const dto = await apiRequest<ProjectDto>('/projects', {
-    method: 'POST',
-    body: {
-      name: input.name,
-      plot_width: input.plotWidth,
-      plot_height: input.plotHeight,
-      facing: input.facing,
-      budget: input.budget,
-      turnkey: input.turnkey,
-      cultural_preference: input.culturalPreference,
-      special_rooms: input.specialRooms,
-      notes: input.notes ?? null,
-    },
-  })
+  const dto = await apiRequest<ProjectDto>('/projects', { method: 'POST', body: projectBody(input) })
+  return mapProject(dto)
+}
+
+/** Saves the brief wizard's answers (the whole brief is replaced). */
+export async function updateProjectBrief(projectId: string, input: ProjectBriefUpdate): Promise<ProjectSummary> {
+  const dto = await apiRequest<ProjectDto>(`/projects/${projectId}`, { method: 'PATCH', body: projectBody(input) })
   return mapProject(dto)
 }
 

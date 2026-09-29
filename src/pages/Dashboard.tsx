@@ -8,6 +8,7 @@ import { Spinner } from '@/components/ui/Spinner'
 import { EmptyState } from '@/components/widgets/EmptyState'
 import { ProjectStatusBadge } from '@/components/widgets/ProjectStatusBadge'
 import { StatCard } from '@/components/widgets/StatCard'
+import { describeBrief } from '@/lib/brief'
 import { formatCurrency } from '@/lib/format'
 import { useProjectsStore } from '@/stores/useProjectsStore'
 
@@ -111,6 +112,7 @@ export function Dashboard() {
                       {project.plotWidth}' × {project.plotHeight}' · {formatCurrency(project.budget)} ·{' '}
                       {project.facing[0].toUpperCase() + project.facing.slice(1)}-facing
                     </p>
+                    <p className="mt-0.5 text-xs text-text-faint">{describeBrief(project.brief)}</p>
                   </div>
                   <ProjectStatusBadge status={project.status} />
                 </CardBody>

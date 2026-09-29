@@ -1,7 +1,7 @@
 import { Divider } from '@/components/ui/Divider'
 import { AiChatPanel } from '@/components/widgets/AiChatPanel'
 import { Logo } from '@/components/widgets/Logo'
-import { NewProjectPanel } from '@/components/widgets/NewProjectPanel'
+import { ProjectBriefPanel } from '@/components/widgets/ProjectBriefPanel'
 import { ProjectSwitcher } from '@/components/widgets/ProjectSwitcher'
 import { ThemeToggle } from '@/components/widgets/ThemeToggle'
 import { UserMenu } from '@/components/widgets/UserMenu'
@@ -21,7 +21,7 @@ export function Navbar() {
         <AiChatPanel />
         <UserMenu />
       </div>
-      <NewProjectPanel />
+      <ProjectBriefPanel />
     </header>
   )
 }
