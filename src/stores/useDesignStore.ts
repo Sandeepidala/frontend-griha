@@ -139,6 +139,17 @@ function changedFields(before: Room, after: Room): Partial<RoomFields> {
   ) as Partial<RoomFields>
 }
 
+function plotChanged(before: Plot, after: Plot) {
+  const sides = ['front', 'rear', 'left', 'right'] as const
+  return (
+    before.width !== after.width ||
+    before.height !== after.height ||
+    before.facing !== after.facing ||
+    before.units !== after.units ||
+    sides.some((side) => before.setbacks[side] !== after.setbacks[side])
+  )
+}
+
 function errorMessage(err: unknown, fallback: string) {
   return err instanceof ApiError ? err.message : fallback
 }
@@ -199,7 +210,7 @@ function queueGuidesSave({ projectId, floors, activeFloorId }: DesignState) {
 function queuePlotSave(projectId: string, plot: Plot) {
   queueSave(
     'plot',
-    { plotWidth: plot.width, plotHeight: plot.height, facing: plot.facing },
+    { plotWidth: plot.width, plotHeight: plot.height, facing: plot.facing, units: plot.units, setbacks: plot.setbacks },
     (merged) => projectsApi.updateProjectPlot(projectId, merged),
     "Couldn't save the plot settings.",
   )
@@ -233,7 +244,13 @@ export const useDesignStore = create<DesignState>((set, get) => ({
       if (get().projectId !== projectId) return
       const floors = project.floors.length > 0 ? project.floors : [placeholderFloor()]
       set({
-        plot: { ...DEFAULT_PLOT, width: project.plotWidth, height: project.plotHeight, facing: project.facing },
+        plot: {
+          width: project.plotWidth,
+          height: project.plotHeight,
+          facing: project.facing,
+          units: project.units,
+          setbacks: project.setbacks,
+        },
         floors,
         activeFloorId: (floors.find((f) => f.level === 0) ?? floors[0]).id,
         status: 'idle',
@@ -332,9 +349,7 @@ export const useDesignStore = create<DesignState>((set, get) => ({
     set({ plot, floors: nextFloors })
 
     if (!projectId) return
-    if (plot.width !== previousPlot.width || plot.height !== previousPlot.height || plot.facing !== previousPlot.facing) {
-      queuePlotSave(projectId, plot)
-    }
+    if (plotChanged(previousPlot, plot)) queuePlotSave(projectId, plot)
     // Shrinking the plot can push rooms back inside it; those moves need saving too.
     nextFloors.forEach((floor, floorIndex) =>
       floor.rooms.forEach((after, roomIndex) =>

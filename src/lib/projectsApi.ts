@@ -10,7 +10,7 @@ import type {
   ProjectSummary,
   ActivityLogEntry,
 } from '@/types/project'
-import type { Plot } from '@/types/design'
+import type { LengthUnit, Plot } from '@/types/design'
 
 interface ProjectDto {
   id: string
@@ -18,6 +18,11 @@ interface ProjectDto {
   plot_width: number
   plot_height: number
   facing: Plot['facing']
+  units: LengthUnit
+  setback_front: number
+  setback_rear: number
+  setback_left: number
+  setback_right: number
   budget: number
   turnkey: boolean
   cultural_preference: CulturalPreference
@@ -47,6 +52,8 @@ function mapProject(dto: ProjectDto): ProjectSummary {
     plotWidth: dto.plot_width,
     plotHeight: dto.plot_height,
     facing: dto.facing,
+    units: dto.units,
+    setbacks: { front: dto.setback_front, rear: dto.setback_rear, left: dto.setback_left, right: dto.setback_right },
     budget: dto.budget,
     turnkey: dto.turnkey,
     culturalPreference: dto.cultural_preference,
@@ -98,11 +105,20 @@ export async function getProject(projectId: string): Promise<ProjectDetail> {
 
 export async function updateProjectPlot(
   projectId: string,
-  patch: Partial<Pick<ProjectSummary, 'plotWidth' | 'plotHeight' | 'facing'>>,
+  patch: Partial<Pick<ProjectSummary, 'plotWidth' | 'plotHeight' | 'facing' | 'units' | 'setbacks'>>,
 ): Promise<void> {
   await apiRequest(`/projects/${projectId}`, {
     method: 'PATCH',
-    body: { plot_width: patch.plotWidth, plot_height: patch.plotHeight, facing: patch.facing },
+    body: {
+      plot_width: patch.plotWidth,
+      plot_height: patch.plotHeight,
+      facing: patch.facing,
+      units: patch.units,
+      setback_front: patch.setbacks?.front,
+      setback_rear: patch.setbacks?.rear,
+      setback_left: patch.setbacks?.left,
+      setback_right: patch.setbacks?.right,
+    },
   })
 }
 
