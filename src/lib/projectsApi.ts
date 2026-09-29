@@ -12,7 +12,7 @@ import type {
 } from '@/types/project'
 import type { LengthUnit, Plot } from '@/types/design'
 
-interface ProjectDto {
+export interface ProjectDto {
   id: string
   name: string
   plot_width: number
@@ -33,12 +33,12 @@ interface ProjectDto {
   updated_at: string
 }
 
-interface ProjectDetailDto extends ProjectDto {
+export interface ProjectDetailDto extends ProjectDto {
   floors: FloorDto[]
   rooms: RoomDto[]
 }
 
-interface ActivityDto {
+export interface ActivityDto {
   id: string
   project_id: string
   message: string

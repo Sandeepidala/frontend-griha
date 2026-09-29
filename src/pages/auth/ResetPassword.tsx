@@ -22,7 +22,11 @@ export function ResetPassword() {
     if (password.length < 8) return setError('Password must be at least 8 characters.')
     if (password !== confirmPassword) return setError('Passwords do not match.')
 
-    await resetPassword(password)
+    try {
+      await resetPassword(password)
+    } catch (err) {
+      return setError(err instanceof Error ? err.message : 'Something went wrong.')
+    }
     toast.success('Password updated — sign in with your new password')
     navigate('/sign-in', { replace: true })
   }

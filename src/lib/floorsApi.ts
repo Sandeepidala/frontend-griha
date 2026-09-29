@@ -11,7 +11,7 @@ export interface FloorDto {
   guides: Guides
 }
 
-interface FloorWithRoomsDto extends FloorDto {
+export interface FloorWithRoomsDto extends FloorDto {
   rooms: RoomDto[]
 }
 

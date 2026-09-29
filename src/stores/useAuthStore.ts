@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import * as authApi from '@/lib/authApi'
 import { ApiError } from '@/lib/apiClient'
+import { DEMO_MODE } from '@/lib/dataMode'
 import { clearSession } from '@/lib/session'
 import { useProjectsStore } from '@/stores/useProjectsStore'
 import type { AuthProvider, AuthUser, SignUpInput } from '@/types/auth'
@@ -40,6 +41,14 @@ function createId() {
 
 function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+/**
+ * Social, SSO and phone sign-in are simulated. In demo mode the in-browser backend still needs a
+ * session for the account, as after a password sign-in, or loading its projects would fail.
+ */
+function withDemoSession(user: AuthUser): Promise<AuthUser> {
+  return DEMO_MODE ? authApi.demoProviderSignIn(user) : Promise.resolve(user)
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -92,7 +101,7 @@ export const useAuthStore = create<AuthState>()(
             registeredUsers: [...state.registeredUsers, { email: user.email, password: '', user }],
           }))
         }
-        set({ user, status: 'idle' })
+        set({ user: await withDemoSession(user), status: 'idle' })
       },
 
       signInWithSso: async (workEmail) => {
@@ -106,7 +115,7 @@ export const useAuthStore = create<AuthState>()(
           provider: 'sso',
           emailVerified: true,
         }
-        set({ user, status: 'idle' })
+        set({ user: await withDemoSession(user), status: 'idle' })
       },
 
       requestOtp: async () => {
@@ -139,7 +148,7 @@ export const useAuthStore = create<AuthState>()(
             registeredUsers: [...state.registeredUsers, { email: '', password: '', user }],
           }))
         }
-        set({ user, status: 'idle' })
+        set({ user: await withDemoSession(user), status: 'idle' })
       },
 
       requestPasswordReset: async (email) => {
@@ -152,6 +161,14 @@ export const useAuthStore = create<AuthState>()(
         set({ status: 'authenticating' })
         await delay(700)
         const email = get().pendingResetEmail
+        if (DEMO_MODE && email) {
+          try {
+            await authApi.demoResetPassword(email, newPassword)
+          } catch (err) {
+            set({ status: 'idle' })
+            throw new Error(err instanceof ApiError ? err.message : "Couldn't reset the password.")
+          }
+        }
         set((state) => ({
           status: 'idle',
           pendingResetEmail: null,

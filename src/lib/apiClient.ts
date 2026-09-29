@@ -1,16 +1,11 @@
+import { ApiError } from './apiError'
+import { DEMO_MODE } from './dataMode'
 import { clearSession, getAccessToken, getRefreshToken, setSession } from './session'
 
+export { ApiError }
+
 const BASE_URL = import.meta.env.VITE_API_BASE_URL
-
-export class ApiError extends Error {
-  status: number
-
-  constructor(status: number, message: string) {
-    super(message)
-    this.name = 'ApiError'
-    this.status = status
-  }
-}
+const SESSION_EXPIRED_MESSAGE = 'Your session has expired. Please sign in again.'
 
 let sessionExpiredHandler: (() => void) | null = null
 
@@ -44,13 +39,31 @@ async function parseErrorMessage(response: Response): Promise<string> {
   return response.statusText || 'Something went wrong.'
 }
 
+export type HttpMethod = 'GET' | 'POST' | 'PATCH' | 'DELETE'
+
 interface RequestOptions {
-  method?: 'GET' | 'POST' | 'PATCH' | 'DELETE'
+  method?: HttpMethod
   body?: unknown
   auth?: boolean
 }
 
+async function demoRequest<T>(path: string, { method = 'GET', body, auth = true }: RequestOptions): Promise<T> {
+  const { handleDemoRequest } = await import('./demoBackend')
+  try {
+    return (await handleDemoRequest(method, path, body, auth ? getAccessToken() : null)) as T
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 401 && auth) {
+      clearSession()
+      sessionExpiredHandler?.()
+      throw new ApiError(401, SESSION_EXPIRED_MESSAGE)
+    }
+    throw err
+  }
+}
+
 export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
+  if (DEMO_MODE) return demoRequest<T>(path, options)
+
   const { method = 'GET', body, auth = true } = options
 
   async function send(): Promise<Response> {
@@ -76,7 +89,7 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
     } else {
       clearSession()
       sessionExpiredHandler?.()
-      throw new ApiError(401, 'Your session has expired. Please sign in again.')
+      throw new ApiError(401, SESSION_EXPIRED_MESSAGE)
     }
   }
 

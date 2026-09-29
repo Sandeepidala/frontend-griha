@@ -2,7 +2,7 @@ import { apiRequest } from './apiClient'
 import { setSession } from './session'
 import type { AccountType, AuthUser } from '@/types/auth'
 
-interface UserDto {
+export interface UserDto {
   id: string
   name: string
   email: string
@@ -13,7 +13,7 @@ interface UserDto {
   email_verified: boolean
 }
 
-interface AuthResponseDto {
+export interface AuthResponseDto {
   access_token: string
   refresh_token: string
   user: UserDto
@@ -68,4 +68,25 @@ export async function login(email: string, password: string): Promise<AuthUser> 
 export async function fetchCurrentUser(): Promise<AuthUser> {
   const dto = await apiRequest<UserDto>('/auth/me')
   return mapUser(dto)
+}
+
+/** Demo mode only: gives a simulated provider sign-in (Google, SSO, phone OTP…) a real session. */
+export async function demoProviderSignIn(user: AuthUser): Promise<AuthUser> {
+  const dto = await apiRequest<AuthResponseDto>('/auth/demo-provider', {
+    method: 'POST',
+    auth: false,
+    body: {
+      name: user.name,
+      email: user.email,
+      phone: user.phone ?? null,
+      provider: user.provider,
+      account_type: user.accountType,
+    },
+  })
+  return applyAuthResponse(dto)
+}
+
+/** Demo mode only: applies a new password from the forgot-password flow. */
+export async function demoResetPassword(email: string, password: string): Promise<void> {
+  await apiRequest('/auth/demo-reset-password', { method: 'POST', auth: false, body: { email, password } })
 }

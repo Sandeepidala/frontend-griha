@@ -1,7 +1,8 @@
 /// <reference types="vite/client" />
 
 interface ImportMetaEnv {
-  readonly VITE_API_BASE_URL: string
+  /** Backend API root. Leave unset to run in demo mode, with an in-browser backend (see lib/dataMode). */
+  readonly VITE_API_BASE_URL?: string
 }
 
 interface ImportMeta {
