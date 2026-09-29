@@ -95,22 +95,66 @@ function fail(status: number, message: string): never {
   throw new ApiError(status, message)
 }
 
-function publicUser({ password: _password, ...user }: DemoUser): UserDto {
+function publicUser({ password: _password, token_version: _version, ...user }: DemoUser): UserDto {
   return user
 }
 
 function authResponse(user: DemoUser): AuthResponseDto {
+  const token = `${TOKEN_PREFIX}${user.id}.${user.token_version ?? 0}`
+  return { access_token: token, refresh_token: token, user: publicUser(user) }
+}
+
+/** Tokens are "demo.<user id>.<version>"; ones from before versions ("demo.<user id>") count as version 0. */
+function currentUser(token: string | null): DemoUser {
+  const [userId, version = '0'] = token?.startsWith(TOKEN_PREFIX) ? token.slice(TOKEN_PREFIX.length).split('.') : []
+  const user = userId ? database().users.find((u) => u.id === userId) : undefined
+  if (!user || Number(version) !== (user.token_version ?? 0)) fail(401, 'Could not validate credentials.')
+  return user
+}
+
+// --- account (mirrors the backend's /auth/change-password, /auth/logout-all, /auth/me) -------
+
+function changePassword(user: DemoUser, body: Body): AuthResponseDto {
+  if (!user.password || body.current_password !== user.password) fail(403, "That password isn't right.")
+  const next = typeof body.new_password === 'string' ? body.new_password : ''
+  if (next.length < MIN_PASSWORD_LENGTH) fail(422, `Password must be at least ${MIN_PASSWORD_LENGTH} characters.`)
+  user.password = next
+  user.token_version = (user.token_version ?? 0) + 1
+  return authResponse(user)
+}
+
+function exportData(user: DemoUser) {
+  const data = database()
+  const projects = data.projects.filter((p) => p.owner_id === user.id)
+  const ids = new Set(projects.map((p) => p.id))
   return {
-    access_token: `${TOKEN_PREFIX}${user.id}`,
-    refresh_token: `${TOKEN_PREFIX}${user.id}`,
-    user: publicUser(user),
+    exported_at: now(),
+    account: publicUser(user),
+    projects: projects.map(projectDetail),
+    activity: data.activity.filter((a) => ids.has(a.project_id)).map(({ user_id: _user, ...entry }) => entry),
+    assistant_messages: [],
+    architect_reviews: data.reviews.filter((r) => r.requester_id === user.id).map(reviewDetail),
+    review_comments_written: data.review_comments
+      .filter((c) => c.author_id === user.id && data.reviews.find((r) => r.id === c.review_id)?.requester_id !== user.id)
+      .map(({ author_id: _author, ...comment }) => comment),
   }
 }
 
-function currentUser(token: string | null): DemoUser {
-  const userId = token?.startsWith(TOKEN_PREFIX) ? token.slice(TOKEN_PREFIX.length) : null
-  const user = userId ? database().users.find((u) => u.id === userId) : undefined
-  return user ?? fail(401, 'Could not validate credentials.')
+function deleteAccount(user: DemoUser, body: Body) {
+  if (user.password ? body.password !== user.password : String(body.confirm_email ?? '').trim().toLowerCase() !== user.email) {
+    fail(403, user.password ? "That password isn't right." : 'Type your email address to confirm.')
+  }
+  const data = database()
+  for (const project of data.projects.filter((p) => p.owner_id === user.id)) deleteProject(project)
+  const requested = new Set(data.reviews.filter((r) => r.requester_id === user.id).map((r) => r.id))
+  data.reviews = data.reviews.filter((r) => !requested.has(r.id))
+  data.review_comments = data.review_comments
+    .filter((c) => !requested.has(c.review_id))
+    .map((c) => (c.author_id === user.id ? { ...c, author_id: null } : c))
+  for (const review of data.reviews) {
+    if (review.architect_id === user.id && review.status === 'in_review') Object.assign(review, { status: 'queued', architect_id: null, claimed_at: null })
+  }
+  data.users = data.users.filter((u) => u.id !== user.id)
 }
 
 function findUserByEmail(email: string) {
@@ -586,7 +630,15 @@ function route(method: HttpMethod, segments: string[], body: Body, token: string
     if (method === 'POST' && projectId === 'login') return login(body)
     if (method === 'POST' && projectId === 'demo-provider') return providerSignIn(body)
     if (method === 'POST' && projectId === 'demo-reset-password') return resetPassword(body)
-    if (method === 'GET' && projectId === 'me') return publicUser(currentUser(token))
+    if (method === 'GET' && projectId === 'me' && !collection) return publicUser(currentUser(token))
+    if (method === 'GET' && projectId === 'me' && collection === 'export') return exportData(currentUser(token))
+    if (method === 'DELETE' && projectId === 'me') return deleteAccount(currentUser(token), body)
+    if (method === 'POST' && projectId === 'change-password') return changePassword(currentUser(token), body)
+    if (method === 'POST' && projectId === 'logout-all') {
+      const user = currentUser(token)
+      user.token_version = (user.token_version ?? 0) + 1
+      return undefined
+    }
   }
 
   if (root === 'reviews') return reviewsRoute(method, currentUser(token), projectId, collection, body)

@@ -172,15 +172,8 @@ export const useAuthStore = create<AuthState>()(
             throw new Error(err instanceof ApiError ? err.message : "Couldn't reset the password.")
           }
         }
-        set((state) => ({
-          status: 'idle',
-          pendingResetEmail: null,
-          registeredUsers: state.registeredUsers.map((entry) =>
-            email && entry.email.toLowerCase() === email.toLowerCase()
-              ? { ...entry, password: newPassword }
-              : entry,
-          ),
-        }))
+        // Passwords live only on the (demo) backend, never in this persisted store.
+        set({ status: 'idle', pendingResetEmail: null })
       },
 
       signOut: () => {
@@ -191,7 +184,8 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: 'griha-auth',
-      partialize: (state) => ({ user: state.user, registeredUsers: state.registeredUsers }),
+      // Strip any password saved by older versions of the simulated sign-in.
+      partialize: (state) => ({ user: state.user, registeredUsers: state.registeredUsers.map((entry) => ({ ...entry, password: '' })) }),
     },
   ),
 )

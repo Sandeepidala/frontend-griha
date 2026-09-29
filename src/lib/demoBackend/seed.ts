@@ -11,6 +11,8 @@ import type { FloorFinish, RoomType } from '@/types/design'
 
 export interface DemoUser extends UserDto {
   password: string
+  /** Stamped into tokens, as on the backend: bumping it signs the account out everywhere. */
+  token_version?: number
 }
 
 export interface DemoProject extends ProjectDto {

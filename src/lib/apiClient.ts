@@ -13,7 +13,17 @@ export function setSessionExpiredHandler(handler: () => void) {
   sessionExpiredHandler = handler
 }
 
-async function refreshAccessToken(): Promise<boolean> {
+// Requests that 401 together share one refresh instead of racing to refresh the same session.
+let refreshing: Promise<boolean> | null = null
+
+function refreshAccessToken(): Promise<boolean> {
+  refreshing ??= sendRefresh().finally(() => {
+    refreshing = null
+  })
+  return refreshing
+}
+
+async function sendRefresh(): Promise<boolean> {
   const refreshToken = getRefreshToken()
   if (!refreshToken) return false
 

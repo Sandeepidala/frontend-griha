@@ -73,6 +73,33 @@ export async function fetchCurrentUser(): Promise<AuthUser> {
   return mapUser(dto)
 }
 
+/** Sets a new password. Every other device is signed out; this one continues with new tokens. */
+export async function changePassword(currentPassword: string, newPassword: string): Promise<AuthUser> {
+  const dto = await apiRequest<AuthResponseDto>('/auth/change-password', {
+    method: 'POST',
+    body: { current_password: currentPassword, new_password: newPassword },
+  })
+  return applyAuthResponse(dto)
+}
+
+/** Revokes every session of this account, on every device including this one. */
+export async function logoutEverywhere(): Promise<void> {
+  await apiRequest('/auth/logout-all', { method: 'POST' })
+}
+
+/** Everything the platform holds about the signed-in user (projects, plans, reviews, messages). */
+export async function exportMyData(): Promise<unknown> {
+  return apiRequest<unknown>('/auth/me/export')
+}
+
+/** Permanently deletes the account and all its projects. Accounts without a password confirm with their email. */
+export async function deleteAccount(confirmation: { password?: string; confirmEmail?: string }): Promise<void> {
+  await apiRequest('/auth/me', {
+    method: 'DELETE',
+    body: { password: confirmation.password ?? null, confirm_email: confirmation.confirmEmail ?? null },
+  })
+}
+
 /** Demo mode only: gives a simulated provider sign-in (Google, SSO, phone OTP…) a real session. */
 export async function demoProviderSignIn(user: AuthUser): Promise<AuthUser> {
   const dto = await apiRequest<AuthResponseDto>('/auth/demo-provider', {
