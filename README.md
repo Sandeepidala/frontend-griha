@@ -14,17 +14,20 @@ npm run dev        # uses the backend in .env (copy .env.example)
 npm run dev:demo   # demo mode, no backend needed
 ```
 
+Production builds (`npm run build`, and so Vercel/Netlify) use the deployed backend from `.env.production`
+(`https://griha-backend.vercel.app/api/v1`). To deploy in demo mode instead, set `VITE_API_BASE_URL` to an empty value in the
+hosting dashboard, which overrides the file.
+
 ## Deploying to Netlify
 
 `netlify.toml` has the build settings and the rewrite that lets browser routes like `/projects/<id>` load on refresh.
-Connect this repo in Netlify and deploy: with no environment variables it runs in demo mode. Once the backend is
-deployed, set `VITE_API_BASE_URL` (e.g. `https://<your-api>/api/v1`) in Site configuration → Environment variables and
-redeploy, and add the Netlify URL to the backend's `CORS_ORIGINS`.
+Connect this repo in Netlify and deploy; it uses the backend from `.env.production`. Add the Netlify URL to the
+backend's `CORS_ORIGINS`, or set `VITE_API_BASE_URL` empty in Site configuration → Environment variables for demo mode.
 
 ## Deploying to Vercel
 
 `vercel.json` rewrites every path to `index.html`, so browser routes like `/projects/<id>` load on refresh. Import the repo
-with the Vite preset; demo mode and `VITE_API_BASE_URL` work the same as on Netlify.
+with the Vite preset; it uses the backend from `.env.production` (a `VITE_API_BASE_URL` set in the Vercel dashboard wins).
 
 ---
 
