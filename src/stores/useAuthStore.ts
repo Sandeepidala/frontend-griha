@@ -95,6 +95,7 @@ export const useAuthStore = create<AuthState>()(
             accountType: 'homeowner',
             provider,
             emailVerified: true,
+            role: 'customer',
           } satisfies AuthUser)
         if (!existing) {
           set((state) => ({
@@ -114,6 +115,7 @@ export const useAuthStore = create<AuthState>()(
           accountType: 'builder',
           provider: 'sso',
           emailVerified: true,
+          role: 'customer',
         }
         set({ user: await withDemoSession(user), status: 'idle' })
       },
@@ -142,6 +144,7 @@ export const useAuthStore = create<AuthState>()(
             accountType: 'homeowner',
             provider: 'phone',
             emailVerified: false,
+            role: 'customer',
           } satisfies AuthUser)
         if (!existing) {
           set((state) => ({

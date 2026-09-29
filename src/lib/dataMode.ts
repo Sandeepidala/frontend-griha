@@ -14,3 +14,5 @@ export const SIMULATED_AUTH_AVAILABLE = DEMO_MODE
 /** Seeded on the real backend too (backend/scripts/seed_demo.py), so the sign-in hint shows in every mode. */
 export const DEMO_EMAIL = 'sandeep.gowda@movingwalls.com'
 export const DEMO_PASSWORD = 'griha1234'
+/** A demo architect (same password), so the review flow can be tried from both sides. */
+export const DEMO_ARCHITECT_EMAIL = 'architect@griha.demo'

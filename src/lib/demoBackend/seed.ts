@@ -1,9 +1,10 @@
 import { DEFAULT_BRIEF } from '../brief'
-import { DEMO_EMAIL, DEMO_PASSWORD } from '../dataMode'
+import { DEMO_ARCHITECT_EMAIL, DEMO_EMAIL, DEMO_PASSWORD } from '../dataMode'
 import { briefToDto, type ActivityDto, type BriefDto, type ProjectDto } from '../projectsApi'
 import type { FloorDto } from '../floorsApi'
 import type { RoomDto } from '../roomsApi'
 import type { UserDto } from '../authApi'
+import type { ReviewCommentDto, ReviewDetailDto } from '../reviewsApi'
 import type { FloorFinish, RoomType } from '@/types/design'
 
 /** Mirrors backend/scripts/seed_demo.py so demo mode starts with the same example content. */
@@ -20,12 +21,26 @@ export interface DemoActivity extends ActivityDto {
   user_id: string
 }
 
+/** Stored like the backend's design_reviews rows: people by id, list fields derived when read. */
+export interface DemoReview
+  extends Omit<ReviewDetailDto, 'requester' | 'architect' | 'comments' | 'project_name' | 'plot_label' | 'location'> {
+  requester_id: string
+  architect_id: string | null
+}
+
+export interface DemoReviewComment extends Omit<ReviewCommentDto, 'author'> {
+  review_id: string
+  author_id: string | null
+}
+
 export interface DemoDb {
   users: DemoUser[]
   projects: DemoProject[]
   floors: FloorDto[]
   rooms: RoomDto[]
   activity: DemoActivity[]
+  reviews: DemoReview[]
+  review_comments: DemoReviewComment[]
 }
 
 export function createId() {
@@ -244,8 +259,23 @@ export function addSamplePortfolio(db: DemoDb, ownerId: string, now = Date.now()
   }
 }
 
+export function demoArchitect(): DemoUser {
+  return {
+    id: createId(),
+    name: 'Ar. Priya Menon',
+    email: DEMO_ARCHITECT_EMAIL,
+    phone: null,
+    avatar_url: null,
+    account_type: 'homeowner',
+    provider: 'password',
+    email_verified: true,
+    role: 'architect',
+    password: DEMO_PASSWORD,
+  }
+}
+
 export function createSeedDb(): DemoDb {
-  const db: DemoDb = { users: [], projects: [], floors: [], rooms: [], activity: [] }
+  const db: DemoDb = { users: [], projects: [], floors: [], rooms: [], activity: [], reviews: [], review_comments: [] }
   const demoUser: DemoUser = {
     id: createId(),
     name: 'Sandeep Gowda',
@@ -255,9 +285,10 @@ export function createSeedDb(): DemoDb {
     account_type: 'builder',
     provider: 'password',
     email_verified: true,
+    role: 'customer',
     password: DEMO_PASSWORD,
   }
-  db.users.push(demoUser)
+  db.users.push(demoUser, demoArchitect())
   addSamplePortfolio(db, demoUser.id)
   return db
 }

@@ -8,6 +8,8 @@ import { ResetPassword } from '@/pages/auth/ResetPassword'
 import { SignIn } from '@/pages/auth/SignIn'
 import { SignUp } from '@/pages/auth/SignUp'
 import { ProjectWorkspace } from '@/pages/ProjectWorkspace'
+import { ReviewWorkspace } from '@/pages/ReviewWorkspace'
+import { Reviews } from '@/pages/Reviews'
 import { Settings } from '@/pages/Settings'
 
 export default function App() {
@@ -39,6 +41,22 @@ export default function App() {
           element={
             <RequireAuth>
               <ProjectWorkspace />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/reviews"
+          element={
+            <RequireAuth>
+              <Reviews />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/reviews/:id"
+          element={
+            <RequireAuth>
+              <ReviewWorkspace />
             </RequireAuth>
           }
         />

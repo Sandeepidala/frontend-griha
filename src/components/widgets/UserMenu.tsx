@@ -1,5 +1,5 @@
 import type { ComponentType } from 'react'
-import { LayoutDashboard, LogOut, Settings, User } from 'lucide-react'
+import { LayoutDashboard, LogOut, Settings, ShieldCheck, User } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { Avatar } from '@/components/ui/Avatar'
 import { Divider } from '@/components/ui/Divider'
@@ -44,6 +44,14 @@ export function UserMenu() {
             label="Dashboard"
             onClick={() => {
               navigate('/')
+              close()
+            }}
+          />
+          <MenuItem
+            icon={ShieldCheck}
+            label={user?.role === 'architect' ? 'Design reviews' : 'Architect reviews'}
+            onClick={() => {
+              navigate('/reviews')
               close()
             }}
           />

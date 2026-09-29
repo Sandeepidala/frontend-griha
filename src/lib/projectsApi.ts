@@ -162,7 +162,8 @@ export async function updateProjectBrief(projectId: string, input: ProjectBriefU
   return mapProject(dto)
 }
 
-function mapDetail(dto: ProjectDetailDto): ProjectDetail {
+/** Also reads review snapshots, which are ProjectDetails frozen at request time. */
+export function mapDetail(dto: ProjectDetailDto): ProjectDetail {
   const floors = dto.floors.map((floor) =>
     mapFloor(
       floor,

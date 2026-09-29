@@ -1,5 +1,6 @@
-import { ClipboardList, Columns2, FileStack, Grid3x3, IndianRupee, ListChecks, Minus, Plus, Ruler, Scaling, Sparkles, View } from 'lucide-react'
+import { ClipboardList, Columns2, FileStack, Grid3x3, IndianRupee, ListChecks, Minus, Plus, Ruler, Scaling, ShieldCheck, Sparkles, View } from 'lucide-react'
 import { FloorSwitcher } from '@/components/canvas/FloorSwitcher'
+import { ReviewStatusBadge } from '@/components/reviews/ReviewParts'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Divider } from '@/components/ui/Divider'
@@ -10,6 +11,7 @@ import { formatLakhs, type BoqEstimate } from '@/lib/boq'
 import { scoreVariant, type DesignReport } from '@/lib/designCheck'
 import { useActiveFloor, useDesignStore, type ViewMode } from '@/stores/useDesignStore'
 import { useProjectsStore } from '@/stores/useProjectsStore'
+import type { Review } from '@/types/review'
 
 const VIEW_OPTIONS: { value: ViewMode; label: string; icon: typeof View }[] = [
   { value: '2d', label: '2D Plan', icon: Scaling },
@@ -27,11 +29,22 @@ interface CanvasToolbarProps {
   onOpenCostEstimate?: () => void
   /** Opens the layout generator. */
   onOpenGenerate?: () => void
+  /** Opens the architect review panel; `review` is the latest one, whose status is shown. */
+  onOpenReview?: () => void
+  review?: Review | null
 }
 
 const BUDGET_VARIANT = { within: 'success', close: 'warning', over: 'danger' } as const
 
-export function CanvasToolbar({ designReport, onOpenDesignCheck, costEstimate, onOpenCostEstimate, onOpenGenerate }: CanvasToolbarProps) {
+export function CanvasToolbar({
+  designReport,
+  onOpenDesignCheck,
+  costEstimate,
+  onOpenCostEstimate,
+  onOpenGenerate,
+  onOpenReview,
+  review,
+}: CanvasToolbarProps) {
   const viewMode = useDesignStore((state) => state.viewMode)
   const setViewMode = useDesignStore((state) => state.setViewMode)
   const zoom = useDesignStore((state) => state.zoom)
@@ -83,6 +96,14 @@ export function CanvasToolbar({ designReport, onOpenDesignCheck, costEstimate, o
           >
             {formatLakhs(costEstimate.total)}
           </Badge>
+        </Button>
+      )}
+
+      {projectId && onOpenReview && (
+        <Button variant="outline" size="sm" onClick={onOpenReview} className="shrink-0 gap-2">
+          <ShieldCheck className="size-4" />
+          <span className="hidden sm:inline">Architect review</span>
+          {review && review.status !== 'cancelled' && <ReviewStatusBadge review={review} />}
         </Button>
       )}
 

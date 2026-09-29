@@ -11,6 +11,8 @@ export interface UserDto {
   account_type: AccountType
   provider: AuthUser['provider']
   email_verified: boolean
+  /** Missing from sessions saved before architect reviews existed. */
+  role?: AuthUser['role']
 }
 
 export interface AuthResponseDto {
@@ -29,6 +31,7 @@ function mapUser(dto: UserDto): AuthUser {
     accountType: dto.account_type,
     provider: dto.provider,
     emailVerified: dto.email_verified,
+    role: dto.role ?? 'customer',
   }
 }
 

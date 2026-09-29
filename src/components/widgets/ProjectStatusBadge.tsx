@@ -4,8 +4,8 @@ import type { ProjectStatus } from '@/types/project'
 const STATUS_CONFIG: Record<ProjectStatus, { label: string; variant: BadgeProps['variant'] }> = {
   draft: { label: 'Draft', variant: 'neutral' },
   generating: { label: 'Generating', variant: 'warning' },
-  in_review: { label: 'In review', variant: 'primary' },
-  ready: { label: 'Ready', variant: 'success' },
+  in_review: { label: 'Architect review', variant: 'primary' },
+  ready: { label: 'Approved', variant: 'success' },
 }
 
 export function ProjectStatusBadge({ status }: { status: ProjectStatus }) {

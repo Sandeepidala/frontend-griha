@@ -13,7 +13,7 @@ import { FormField } from '@/components/widgets/FormField'
 import { OtpInput } from '@/components/widgets/OtpInput'
 import { PasswordInput } from '@/components/widgets/PasswordInput'
 import { SocialButton } from '@/components/widgets/SocialButton'
-import { DEMO_EMAIL, DEMO_PASSWORD, SIMULATED_AUTH_AVAILABLE } from '@/lib/dataMode'
+import { DEMO_ARCHITECT_EMAIL, DEMO_EMAIL, DEMO_PASSWORD, SIMULATED_AUTH_AVAILABLE } from '@/lib/dataMode'
 import { useAuthStore } from '@/stores/useAuthStore'
 import { toast } from '@/stores/useToastStore'
 
@@ -167,6 +167,18 @@ export function SignIn() {
             className="text-center text-xs text-text-faint transition-colors hover:text-text-muted"
           >
             Demo account — {DEMO_EMAIL} / {DEMO_PASSWORD} ·{' '}
+            <span className="font-medium text-primary">Use it</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setEmail(DEMO_ARCHITECT_EMAIL)
+              setPassword(DEMO_PASSWORD)
+              setError(null)
+            }}
+            className="-mt-1.5 text-center text-xs text-text-faint transition-colors hover:text-text-muted"
+          >
+            Demo architect — {DEMO_ARCHITECT_EMAIL} ·{' '}
             <span className="font-medium text-primary">Use it</span>
           </button>
         </div>

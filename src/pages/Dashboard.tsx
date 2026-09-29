@@ -1,5 +1,5 @@
 import { AlertTriangle, Building2, CheckCircle2, Clock, FolderKanban, IndianRupee, Sparkles } from 'lucide-react'
-import { useNavigate } from 'react-router-dom'
+import { Navigate, useNavigate } from 'react-router-dom'
 import { Container } from '@/components/layout/Container'
 import { Navbar } from '@/components/layout/Navbar'
 import { Button } from '@/components/ui/Button'
@@ -10,6 +10,7 @@ import { ProjectStatusBadge } from '@/components/widgets/ProjectStatusBadge'
 import { StatCard } from '@/components/widgets/StatCard'
 import { describeBrief } from '@/lib/brief'
 import { formatCurrency } from '@/lib/format'
+import { useAuthStore } from '@/stores/useAuthStore'
 import { useProjectsStore } from '@/stores/useProjectsStore'
 
 export function Dashboard() {
@@ -22,6 +23,7 @@ export function Dashboard() {
   const setActiveProject = useProjectsStore((state) => state.setActiveProject)
   const openNewProjectPanel = useProjectsStore((state) => state.openNewProjectPanel)
   const fetchProjects = useProjectsStore((state) => state.fetchProjects)
+  const isArchitect = useAuthStore((state) => state.user?.role === 'architect')
 
   if (status === 'loading' && !hasLoaded) {
     return (
@@ -52,6 +54,8 @@ export function Dashboard() {
   }
 
   if (projects.length === 0) {
+    // Architects' work is reviewing others' designs; their desk is the review queue.
+    if (isArchitect) return <Navigate to="/reviews" replace />
     return (
       <div className="min-h-svh bg-bg">
         <Navbar />
@@ -93,7 +97,7 @@ export function Dashboard() {
           <StatCard label="Total projects" value={projects.length} icon={FolderKanban} />
           <StatCard label="In progress" value={inProgress.length} icon={Clock} />
           <StatCard label="Avg. budget" value={formatCurrency(avgBudget)} icon={IndianRupee} />
-          <StatCard label="Ready for review" value={ready.length} icon={CheckCircle2} />
+          <StatCard label="Ready to build" value={ready.length} icon={CheckCircle2} />
         </div>
 
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">

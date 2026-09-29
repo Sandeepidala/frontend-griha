@@ -3,7 +3,9 @@ import type { HttpMethod } from '../apiClient'
 import type { AuthResponseDto, UserDto } from '../authApi'
 import type { FloorDto, FloorWithRoomsDto } from '../floorsApi'
 import type { BriefDto, ProjectDetailDto, ProjectDto } from '../projectsApi'
+import type { ReviewDetailDto, ReviewPartyDto, ReviewQuoteDto, ReviewSummaryDto } from '../reviewsApi'
 import type { RoomDto } from '../roomsApi'
+import { DEMO_ARCHITECT_EMAIL } from '../dataMode'
 import {
   GROUND_FLOOR_NAME,
   PROJECT_DEFAULTS,
@@ -12,8 +14,10 @@ import {
   completeBrief,
   createId,
   createSeedDb,
+  demoArchitect,
   type DemoDb,
   type DemoProject,
+  type DemoReview,
   type DemoUser,
 } from './seed'
 
@@ -33,7 +37,7 @@ function database(): DemoDb {
   if (db) return db
   try {
     const stored = localStorage.getItem(STORAGE_KEY)
-    if (stored) db = upgradeStoredProjects(JSON.parse(stored) as DemoDb)
+    if (stored) db = upgradeStoredReviews(upgradeStoredProjects(JSON.parse(stored) as DemoDb))
   } catch {
     // unreadable or blocked storage: start over in memory
   }
@@ -63,6 +67,15 @@ function upgradeStoredProjects(data: DemoDb): DemoDb {
     delete project.cultural_preference
     delete project.special_rooms
   }
+  return data
+}
+
+// Databases saved before architect reviews: add roles, the review tables and the demo architect.
+function upgradeStoredReviews(data: DemoDb): DemoDb {
+  data.reviews ??= []
+  data.review_comments ??= []
+  for (const user of data.users) user.role ??= 'customer'
+  if (!data.users.some((u) => u.email === DEMO_ARCHITECT_EMAIL)) data.users.push(demoArchitect())
   return data
 }
 
@@ -138,6 +151,7 @@ function signup(body: Body): AuthResponseDto {
     account_type: (body.account_type as UserDto['account_type']) ?? 'homeowner',
     provider: 'password',
     email_verified: false,
+    role: 'customer',
   })
   return authResponse(user)
 }
@@ -166,6 +180,7 @@ function providerSignIn(body: Body): AuthResponseDto {
       account_type: (body.account_type as UserDto['account_type']) ?? 'homeowner',
       provider: (body.provider as UserDto['provider']) ?? 'password',
       email_verified: Boolean(email),
+      role: 'customer',
     })
   return authResponse(user)
 }
@@ -272,6 +287,9 @@ function deleteProject(project: DemoProject) {
   data.floors = data.floors.filter((f) => f.project_id !== project.id)
   data.rooms = data.rooms.filter((r) => r.project_id !== project.id)
   data.activity = data.activity.filter((a) => a.project_id !== project.id)
+  const reviewIds = new Set(data.reviews.filter((r) => r.project_id === project.id).map((r) => r.id))
+  data.reviews = data.reviews.filter((r) => !reviewIds.has(r.id))
+  data.review_comments = data.review_comments.filter((c) => !reviewIds.has(c.review_id))
 }
 
 // --- floors and rooms -----------------------------------------------------------------------
@@ -388,6 +406,176 @@ function replaceLayout(user: DemoUser, project: DemoProject, body: Body): Projec
   return projectDetail(project)
 }
 
+// --- architect reviews (mirrors backend app/api/routes/reviews.py) --------------------------
+
+// Placeholders, as in the backend's settings.
+const REVIEW_FEE = 4999
+const REVIEW_GST_RATE = 0.18
+const REVIEW_TURNAROUND_DAYS = 3
+const ACTIVE_REVIEW: DemoReview['status'][] = ['awaiting_payment', 'queued', 'in_review']
+
+function reviewQuote(): ReviewQuoteDto {
+  const tax = Math.round(REVIEW_FEE * REVIEW_GST_RATE)
+  return {
+    fee: REVIEW_FEE,
+    tax,
+    total: REVIEW_FEE + tax,
+    tax_rate: REVIEW_GST_RATE,
+    turnaround_days: REVIEW_TURNAROUND_DAYS,
+    payments: 'simulated',
+  }
+}
+
+function party(userId: string | null): ReviewPartyDto | null {
+  const user = userId ? database().users.find((u) => u.id === userId) : undefined
+  return user ? { id: user.id, name: user.name, role: user.role ?? 'customer' } : null
+}
+
+function reviewSummary({ requester_id, architect_id, snapshot, ...review }: DemoReview): ReviewSummaryDto {
+  const location = [snapshot.brief?.city, snapshot.brief?.state].filter(Boolean).join(', ')
+  return {
+    ...review,
+    requester: party(requester_id)!,
+    architect: party(architect_id),
+    project_name: snapshot.name,
+    plot_label: `${snapshot.plot_width} x ${snapshot.plot_height} ft, ${snapshot.facing}-facing`,
+    location: location || null,
+  }
+}
+
+function reviewDetail(review: DemoReview): ReviewDetailDto {
+  return {
+    ...reviewSummary(review),
+    snapshot: review.snapshot,
+    comments: database()
+      .review_comments.filter((c) => c.review_id === review.id)
+      .sort((a, b) => a.created_at.localeCompare(b.created_at))
+      .map(({ review_id: _review, author_id, ...comment }) => ({ ...comment, author: party(author_id) })),
+  }
+}
+
+const isArchitect = (user: DemoUser) => user.role === 'architect'
+
+function visibleReview(user: DemoUser, reviewId: string): DemoReview {
+  const review = database().reviews.find((r) => r.id === reviewId)
+  const visible =
+    review &&
+    (review.requester_id === user.id || (isArchitect(user) && (review.architect_id === user.id || review.status === 'queued')))
+  return visible ? review : fail(404, 'Review not found')
+}
+
+function setProjectStatus(projectId: string, status: ProjectDto['status']) {
+  const project = database().projects.find((p) => p.id === projectId)
+  if (project) project.status = status
+}
+
+function reviewActivity(review: DemoReview, user: DemoUser, message: string) {
+  database().activity.push({ id: createId(), project_id: review.project_id, user_id: user.id, message, created_at: now() })
+}
+
+function requestReview(user: DemoUser, project: DemoProject, body: Body): ReviewDetailDto {
+  if (!database().rooms.some((r) => r.project_id === project.id)) fail(409, 'Add rooms to the plan before requesting a review.')
+  if (database().reviews.some((r) => r.project_id === project.id && ACTIVE_REVIEW.includes(r.status))) {
+    fail(409, 'This project already has a review in progress.')
+  }
+  const quote = reviewQuote()
+  const timestamp = now()
+  const note = typeof body.note === 'string' ? body.note.trim() : ''
+  const review: DemoReview = {
+    id: createId(),
+    project_id: project.id,
+    requester_id: user.id,
+    architect_id: null,
+    status: 'awaiting_payment',
+    outcome: null,
+    customer_note: note || null,
+    summary: null,
+    snapshot: structuredClone(projectDetail(project)),
+    fee: quote.fee,
+    tax: quote.tax,
+    total: quote.total,
+    payment_reference: null,
+    paid_at: null,
+    due_at: null,
+    claimed_at: null,
+    completed_at: null,
+    created_at: timestamp,
+    updated_at: timestamp,
+  }
+  database().reviews.push(review)
+  addActivity(project, user, 'Architect review requested')
+  return reviewDetail(review)
+}
+
+function reviewAction(user: DemoUser, review: DemoReview, action: string, body: Body): ReviewDetailDto {
+  const timestamp = now()
+  const isRequester = review.requester_id === user.id
+  if (action === 'pay') {
+    if (!isRequester) fail(403, 'Only the customer who requested the review can pay for it.')
+    if (review.status !== 'awaiting_payment') fail(409, 'This review has already been paid for.')
+    const due = new Date(Date.now() + REVIEW_TURNAROUND_DAYS * 86_400_000).toISOString()
+    const reference = `SIM-${createId().replace(/-/g, '').slice(0, 8).toUpperCase()}`
+    Object.assign(review, { status: 'queued', paid_at: timestamp, due_at: due, payment_reference: reference })
+    setProjectStatus(review.project_id, 'in_review')
+    reviewActivity(review, user, `Review fee of Rs ${review.total.toLocaleString('en-IN')} paid (simulated, ref ${reference})`)
+  } else if (action === 'cancel') {
+    if (!isRequester) fail(403, 'Only the customer who requested the review can cancel it.')
+    if (review.status !== 'awaiting_payment' && review.status !== 'queued') {
+      fail(409, "An architect has already started this review, so it can't be cancelled.")
+    }
+    review.status = 'cancelled'
+    setProjectStatus(review.project_id, 'draft')
+    reviewActivity(review, user, 'Architect review cancelled')
+  } else if (action === 'claim') {
+    if (!isArchitect(user)) fail(403, 'Only architects can take on reviews.')
+    if (review.status !== 'queued') fail(409, "This review isn't waiting for an architect any more.")
+    if (isRequester) fail(409, "You can't review your own project.")
+    Object.assign(review, { status: 'in_review', architect_id: user.id, claimed_at: timestamp })
+    reviewActivity(review, user, `${user.name} started the architect review`)
+  } else if (action === 'comments') {
+    if (review.architect_id !== user.id && !isRequester) fail(403, 'Take on the review before commenting.')
+    if (review.status === 'awaiting_payment' || review.status === 'cancelled') fail(409, 'Comments open once the review is paid for.')
+    const text = requireString(body, 'body', 'Write a comment.')
+    if (text.length > 4000) fail(422, 'Keep comments under 4,000 characters.')
+    const roomId = typeof body.room_id === 'string' && body.room_id ? body.room_id : null
+    database().review_comments.push({
+      id: createId(),
+      review_id: review.id,
+      author_id: user.id,
+      body: text,
+      room_id: roomId,
+      created_at: timestamp,
+    })
+  } else if (action === 'complete') {
+    if (review.architect_id !== user.id) fail(403, 'Only the architect reviewing this design can complete it.')
+    if (review.status !== 'in_review') fail(409, "This review isn't in progress.")
+    const outcome = body.outcome === 'approved' || body.outcome === 'changes_requested' ? body.outcome : fail(422, 'Choose an outcome.')
+    const summary = requireString(body, 'summary', 'Write a summary for the customer.')
+    Object.assign(review, { status: 'completed', outcome, summary, completed_at: timestamp })
+    setProjectStatus(review.project_id, outcome === 'approved' ? 'ready' : 'draft')
+    reviewActivity(review, user, `Architect review completed: ${outcome === 'approved' ? 'approved' : 'changes requested'}`)
+  } else {
+    fail(404, 'Not Found')
+  }
+  review.updated_at = timestamp
+  return reviewDetail(review)
+}
+
+function reviewsRoute(method: HttpMethod, user: DemoUser, reviewId: string | undefined, action: string | undefined, body: Body) {
+  if (reviewId === 'quote' && method === 'GET') return reviewQuote()
+  if (!reviewId && method === 'GET') {
+    return database()
+      .reviews.filter((r) => (isArchitect(user) ? r.status === 'queued' || r.architect_id === user.id : r.requester_id === user.id))
+      .sort((a, b) => b.created_at.localeCompare(a.created_at))
+      .map(reviewSummary)
+  }
+  if (!reviewId) return fail(404, 'Not Found')
+  const review = visibleReview(user, reviewId)
+  if (!action && method === 'GET') return reviewDetail(review)
+  if (action && method === 'POST') return reviewAction(user, review, action, body)
+  return fail(404, 'Not Found')
+}
+
 // --- routing --------------------------------------------------------------------------------
 
 function route(method: HttpMethod, segments: string[], body: Body, token: string | null): unknown {
@@ -400,6 +588,8 @@ function route(method: HttpMethod, segments: string[], body: Body, token: string
     if (method === 'POST' && projectId === 'demo-reset-password') return resetPassword(body)
     if (method === 'GET' && projectId === 'me') return publicUser(currentUser(token))
   }
+
+  if (root === 'reviews') return reviewsRoute(method, currentUser(token), projectId, collection, body)
 
   if (root === 'projects') {
     const user = currentUser(token)
@@ -424,6 +614,16 @@ function route(method: HttpMethod, segments: string[], body: Body, token: string
     }
 
     if (collection === 'layout' && method === 'PUT') return replaceLayout(user, project, body)
+
+    if (collection === 'reviews') {
+      if (method === 'GET') {
+        return database()
+          .reviews.filter((r) => r.project_id === project.id)
+          .sort((a, b) => b.created_at.localeCompare(a.created_at))
+          .map(reviewDetail)
+      }
+      if (method === 'POST') return requestReview(user, project, body)
+    }
 
     if (collection === 'activity' && method === 'GET') {
       return database()

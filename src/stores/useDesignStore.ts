@@ -183,7 +183,7 @@ function cancelSave(key: string) {
 }
 
 /** Sends every batched save now, e.g. before the server copies data it may not have yet. */
-async function flushSaves() {
+export async function flushSaves() {
   const pending = [...pendingSaves.values()]
   pending.forEach(({ timer }) => window.clearTimeout(timer))
   await Promise.all(pending.map(({ send }) => send()))
