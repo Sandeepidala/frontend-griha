@@ -15,12 +15,16 @@ export function exteriorSides(room: PlanRoom, model: FloorModel): Set<Side> {
 export function lightChecks(ctx: CheckContext): CheckResult[] {
   const results: CheckResult[] = []
   let habitable = 0
+  let withOutsideWall = 0
   let crossVentilated = 0
+  let bathrooms = 0
+  let ventilatedBathrooms = 0
 
   for (const { room, model } of ctx.allRooms) {
     const sides = exteriorSides(room, model)
     if (isHabitable(room)) {
       habitable++
+      if (sides.size > 0) withOutsideWall++
       if (sides.size === 0) {
         results.push({
           id: `light-none-${room.id}`,
@@ -45,7 +49,12 @@ export function lightChecks(ctx: CheckContext): CheckResult[] {
           floorId: model.floor.id,
         })
       }
-    } else if (isBathroom(room) && sides.size === 0) {
+    } else if (isBathroom(room)) {
+      bathrooms++
+      if (sides.size > 0) {
+        ventilatedBathrooms++
+        continue
+      }
       results.push({
         id: `light-bath-${room.id}`,
         category: 'light',
@@ -67,9 +76,28 @@ export function lightChecks(ctx: CheckContext): CheckResult[] {
       title: `${crossVentilated} of ${habitable} bedrooms, living rooms and kitchens have windows on two sides`,
       detail: share >= 0.5 ? undefined : 'Aim for at least half, for cross-ventilation through the house.',
     })
-    if (!results.some((r) => r.id.startsWith('light-none-'))) {
-      results.push({ id: 'light-all-outside', category: 'light', status: 'pass', title: 'Every bedroom, living room and kitchen has an outside wall' })
+    // Weighted by the number of rooms, matching the per-room failures above (which count double).
+    if (withOutsideWall > 0) {
+      results.push({
+        id: 'light-outside-passed',
+        category: 'light',
+        status: 'pass',
+        title:
+          withOutsideWall === habitable
+            ? 'Every bedroom, living room and kitchen has an outside wall'
+            : `${withOutsideWall} of ${habitable} bedrooms, living rooms and kitchens have an outside wall`,
+        weight: withOutsideWall * 2,
+      })
     }
+  }
+  if (ventilatedBathrooms > 0) {
+    results.push({
+      id: 'light-bath-passed',
+      category: 'light',
+      status: 'pass',
+      title: ventilatedBathrooms === bathrooms ? 'Every bathroom has an outside wall for a ventilator' : `${ventilatedBathrooms} of ${bathrooms} bathrooms have an outside wall for a ventilator`,
+      weight: ventilatedBathrooms,
+    })
   }
 
   return results

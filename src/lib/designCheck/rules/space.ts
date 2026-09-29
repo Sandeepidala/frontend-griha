@@ -32,6 +32,7 @@ const ft = (m: number) => `${(m * FT_PER_M).toFixed(1)} ft`
 export function spaceChecks(ctx: CheckContext): CheckResult[] {
   const results: CheckResult[] = []
   let checked = 0
+  let passed = 0
 
   for (const { room, model } of ctx.allRooms) {
     const minimum = minimumFor(room, ctx)
@@ -44,7 +45,10 @@ export function spaceChecks(ctx: CheckContext): CheckResult[] {
       sqft(room) < minArea - 0.5 ? `${formatSqft(sqft(room))} (minimum ${formatSqft(minArea)})` : null,
       narrow < minWidth - 0.05 ? `${narrow.toFixed(1)} ft wide (minimum ${ft(minimum.widthM)})` : null,
     ].filter(Boolean)
-    if (problems.length === 0) continue
+    if (problems.length === 0) {
+      passed++
+      continue
+    }
     results.push({
       id: `space-min-${room.id}`,
       category: 'space',
@@ -57,8 +61,15 @@ export function spaceChecks(ctx: CheckContext): CheckResult[] {
     })
   }
 
-  if (checked > 0 && results.length === 0) {
-    results.push({ id: 'space-min-all', category: 'space', status: 'pass', title: `All ${checked} main rooms meet the minimum sizes` })
+  if (passed > 0) {
+    // Weighted by the number of rooms, so one small room doesn't outweigh all the others.
+    results.push({
+      id: 'space-min-passed',
+      category: 'space',
+      status: 'pass',
+      title: passed === checked ? `All ${checked} main rooms meet the minimum sizes` : `${passed} of ${checked} main rooms meet the minimum sizes`,
+      weight: passed,
+    })
   }
 
   for (const model of ctx.models) {

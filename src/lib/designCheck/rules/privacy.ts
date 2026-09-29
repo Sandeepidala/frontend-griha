@@ -38,8 +38,19 @@ export function privacyChecks(ctx: CheckContext): CheckResult[] {
       floorId: ctx.lowest?.floor.id,
     })
   }
-  if (groundBedrooms.length > 0 && exposed.length === 0) {
-    results.push({ id: 'privacy-front', category: 'privacy', status: 'pass', title: 'Ground-floor bedrooms are away from the road side' })
+  const familyBedrooms = groundBedrooms.filter((room) => !nameMatches(room, 'guest')).length
+  const awayFromRoad = familyBedrooms - exposed.length
+  if (awayFromRoad > 0) {
+    results.push({
+      id: 'privacy-front-passed',
+      category: 'privacy',
+      status: 'pass',
+      title:
+        exposed.length === 0
+          ? 'Ground-floor bedrooms are away from the road side'
+          : `${awayFromRoad} of ${familyBedrooms} ground-floor bedrooms are away from the road side`,
+      weight: awayFromRoad,
+    })
   }
 
   let sharedWall = false

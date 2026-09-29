@@ -162,6 +162,29 @@ describe('room sizes', () => {
   })
 })
 
+describe('proportional scoring', () => {
+  const score = (report: DesignReport, category: CheckCategory) => report.categories.find((c) => c.category === category)?.score
+
+  it('lets one small room lower Room sizes in proportion, not to zero', () => {
+    const { floors } = soundHouse() // 4 main rooms that meet the minimums (the store isn't sized)
+    const small = room('Bedroom 2', 'bedroom', 13, 14, 6, 10)
+    floors[0].rooms.push(small)
+    const report = runDesignCheck({ plot: plot(), floors, brief: brief() })
+    expect(find(report, 'space-min-passed')).toMatchObject({ title: '4 of 5 main rooms meet the minimum sizes', weight: 4 })
+    expect(score(report, 'space')).toBe(80)
+  })
+
+  it('scores an enclosed room against the rooms that do have an outside wall', () => {
+    const rooms: Room[] = []
+    for (let row = 0; row < 3; row++) {
+      for (let col = 0; col < 3; col++) rooms.push(room(`Bedroom ${row}${col}`, 'bedroom', col * 12, row * 12, 12, 12))
+    }
+    const report = runDesignCheck({ plot: plot(), floors: [floor(rooms)], brief: brief() })
+    expect(find(report, 'light-outside-passed')?.title).toBe('8 of 9 bedrooms, living rooms and kitchens have an outside wall')
+    expect(score(report, 'light')).toBeGreaterThan(70)
+  })
+})
+
 describe('light and ventilation', () => {
   it('fails a habitable room enclosed on all sides', () => {
     // A 3 × 3 grid of rooms: the middle one has no outside wall.
