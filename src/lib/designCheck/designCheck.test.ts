@@ -60,17 +60,18 @@ function find(report: DesignReport, id: string) {
 }
 
 /**
- * A sound ground floor on a 40 × 40 north-facing plot, set back 4 ft all round: living room at the
- * front (north), bathroom in the west, master bedroom in the south-west, a store in the south and the
+ * A sound ground floor on a 40 × 40 north-facing plot, set back 4 ft all round: living room and foyer
+ * at the front (north), bathroom in the west, master bedroom in the south-west, a store in the south and the
  * kitchen in the south-east, around an open courtyard. Every room has an outside wall.
  */
 function soundHouse() {
-  const living = room('Living Room', 'living', 4, 4, 32, 10)
+  const living = room('Living Room', 'living', 4, 4, 18, 10)
+  const foyer = room('Foyer', 'circulation', 22, 4, 14, 10)
   const bath = room('Bathroom', 'wet', 4, 14, 8, 10)
   const master = room('Master Bedroom', 'bedroom', 4, 24, 12, 12)
   const store = room('Store Room', 'utility', 16, 24, 6, 12)
   const kitchen = room('Kitchen', 'kitchen', 26, 24, 10, 12)
-  return { living, master, bath, store, kitchen, floors: [floor([living, bath, master, store, kitchen])] }
+  return { living, master, bath, store, kitchen, floors: [floor([living, foyer, bath, master, store, kitchen])] }
 }
 
 describe('runDesignCheck', () => {
@@ -242,9 +243,18 @@ describe('Vastu', () => {
   it('fails a kitchen in the north-east and a bathroom at the centre', () => {
     const kitchen = room('Kitchen', 'kitchen', 28, 0, 12, 12)
     const bath = room('Bathroom', 'wet', 16, 16, 8, 8)
-    const report = runDesignCheck({ plot: plot(), floors: [floor([kitchen, bath])], brief: brief({ vastu: true }) })
+    const store = room('Store', 'utility', 0, 28, 12, 12) // spans the house across the plot
+    const report = runDesignCheck({ plot: plot(), floors: [floor([kitchen, bath, store])], brief: brief({ vastu: true }) })
     expect(find(report, `vastu-${kitchen.id}`)).toMatchObject({ status: 'fail', detail: expect.stringContaining('Ideal: south-east') })
     expect(find(report, `vastu-${bath.id}`)?.status).toBe('fail')
+  })
+
+  it('judges zones on the house, not the whole plot', () => {
+    // A small house in the south-west corner of a big plot: its own kitchen corner is south-east.
+    const kitchen = room('Kitchen', 'kitchen', 12, 72, 8, 8)
+    const house = [room('Living', 'living', 0, 60, 20, 12), room('Bedroom', 'bedroom', 0, 72, 12, 8), kitchen]
+    const report = runDesignCheck({ plot: plot({ width: 80, height: 80 }), floors: [floor(house)], brief: brief({ vastu: true }) })
+    expect(find(report, `vastu-${kitchen.id}`)?.title).toBe('Kitchen in the south-east (ideal)')
   })
 
   it('checks which half of the road side the main entrance is on', () => {

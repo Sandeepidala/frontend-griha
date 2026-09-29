@@ -22,7 +22,7 @@ interface Placement {
 
 /**
  * Commonly followed Vastu placements, applied the same way to every project that keeps Vastu on.
- * Zones are a 3 × 3 grid over the plot; the centre (Brahmasthan) is kept free of kitchens,
+ * Zones are a 3 × 3 grid over the house's footprint; the centre (Brahmasthan) is kept free of kitchens,
  * bathrooms and stairs.
  */
 const KITCHEN: Placement = { label: 'kitchen', ideal: ['SE'], acceptable: ['NW'], avoid: ['NE', 'SW', 'C'] }
@@ -73,7 +73,7 @@ export function vastuChecks(ctx: CheckContext): CheckResult[] {
   for (const { room, model } of ctx.allRooms) {
     const placement = placementFor(room, ctx)
     if (!placement) continue
-    const zone = roomZone(room, ctx.plot)
+    const zone = roomZone(room, ctx.building ?? ctx.plot)
     const { status, verdict } = judge(zone, placement)
     results.push({
       id: `vastu-${room.id}`,
@@ -90,7 +90,7 @@ export function vastuChecks(ctx: CheckContext): CheckResult[] {
   for (const model of ctx.models) {
     for (const stair of model.floor.staircases) {
       const length = stair.treadCount * stair.treadDepth
-      const zone = zoneOf({ x: stair.x + stair.width / 2, y: stair.y + length / 2 }, ctx.plot)
+      const zone = zoneOf({ x: stair.x + stair.width / 2, y: stair.y + length / 2 }, ctx.building ?? ctx.plot)
       const { status, verdict } = judge(zone, STAIRCASE)
       results.push({
         id: `vastu-stair-${stair.id}`,

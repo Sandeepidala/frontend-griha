@@ -39,7 +39,7 @@ async function parseErrorMessage(response: Response): Promise<string> {
   return response.statusText || 'Something went wrong.'
 }
 
-export type HttpMethod = 'GET' | 'POST' | 'PATCH' | 'DELETE'
+export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
 
 interface RequestOptions {
   method?: HttpMethod

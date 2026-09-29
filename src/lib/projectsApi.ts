@@ -1,7 +1,7 @@
 import { apiRequest } from './apiClient'
 import { mapFloor, type FloorDto } from './floorsApi'
 import { formatRelativeTime } from './format'
-import { mapRoom, type RoomDto } from './roomsApi'
+import { mapRoom, toRoomBody, type RoomDto } from './roomsApi'
 import type {
   NewProjectInput,
   ProjectBriefUpdate,
@@ -11,7 +11,7 @@ import type {
   ActivityLogEntry,
 } from '@/types/project'
 import type { DesignStyle, ExtraRoom, FamilyType, KitchenType, PlotShape, ProjectBrief } from '@/types/brief'
-import type { LengthUnit, Plot } from '@/types/design'
+import type { Floor, LengthUnit, Plot } from '@/types/design'
 
 export interface BriefDto {
   plot_shape: PlotShape
@@ -158,8 +158,7 @@ export async function updateProjectBrief(projectId: string, input: ProjectBriefU
   return mapProject(dto)
 }
 
-export async function getProject(projectId: string): Promise<ProjectDetail> {
-  const dto = await apiRequest<ProjectDetailDto>(`/projects/${projectId}`)
+function mapDetail(dto: ProjectDetailDto): ProjectDetail {
   const floors = dto.floors.map((floor) =>
     mapFloor(
       floor,
@@ -167,6 +166,28 @@ export async function getProject(projectId: string): Promise<ProjectDetail> {
     ),
   )
   return { ...mapProject(dto), floors }
+}
+
+export async function getProject(projectId: string): Promise<ProjectDetail> {
+  return mapDetail(await apiRequest<ProjectDetailDto>(`/projects/${projectId}`))
+}
+
+/** Replaces every floor and room with a new plan (e.g. a generated option) in one request. */
+export async function replaceLayout(projectId: string, floors: Floor[], note?: string): Promise<ProjectDetail> {
+  const dto = await apiRequest<ProjectDetailDto>(`/projects/${projectId}/layout`, {
+    method: 'PUT',
+    body: {
+      note: note ?? null,
+      floors: floors.map((floor) => ({
+        name: floor.name,
+        level: floor.level,
+        elevation: floor.elevation,
+        guides: floor.guides,
+        rooms: floor.rooms.map(({ id: _id, ...room }) => toRoomBody(room)),
+      })),
+    },
+  })
+  return mapDetail(dto)
 }
 
 export async function updateProjectPlot(

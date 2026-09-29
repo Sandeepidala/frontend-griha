@@ -63,7 +63,7 @@ export function mapRoom(dto: RoomDto): Room {
   }
 }
 
-function toRoomBody(fields: Partial<RoomFields>) {
+export function toRoomBody(fields: Partial<RoomFields>) {
   return Object.fromEntries(
     Object.entries(fields).map(([key, value]) => [API_FIELD[key as keyof RoomFields], value]),
   )

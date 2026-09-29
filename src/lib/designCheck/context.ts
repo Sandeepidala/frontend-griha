@@ -1,7 +1,10 @@
-import { buildBuildingModel, center, type FloorModel, type PlanRoom, type Point } from '@/lib/drawings/geometry'
+import { buildBuildingModel, center, unionRect, type FloorModel, type PlanRoom, type Point, type Rect } from '@/lib/drawings/geometry'
 import type { DesignCheckInput } from './types'
 
-/** Compass zones of a 3 × 3 grid over the plot. The plan is always north-up: y = 0 is the north edge. */
+/**
+ * Compass zones of a 3 × 3 grid over an area: the building's footprint for room placement, as Vastu is
+ * usually applied to the house itself. The plan is always north-up: y = 0 is the north edge.
+ */
 export type Zone = 'NW' | 'N' | 'NE' | 'W' | 'C' | 'E' | 'SW' | 'S' | 'SE'
 
 export const ZONE_LABELS: Record<Zone, string> = {
@@ -16,9 +19,9 @@ export const ZONE_LABELS: Record<Zone, string> = {
   SE: 'south-east',
 }
 
-export function zoneOf(point: Point, plot: { width: number; height: number }): Zone {
-  const col = Math.min(2, Math.max(0, Math.floor((point.x / plot.width) * 3)))
-  const row = Math.min(2, Math.max(0, Math.floor((point.y / plot.height) * 3)))
+export function zoneOf(point: Point, area: { x?: number; y?: number; width: number; height: number }): Zone {
+  const col = Math.min(2, Math.max(0, Math.floor(((point.x - (area.x ?? 0)) / area.width) * 3)))
+  const row = Math.min(2, Math.max(0, Math.floor(((point.y - (area.y ?? 0)) / area.height) * 3)))
   const grid: Zone[][] = [
     ['NW', 'N', 'NE'],
     ['W', 'C', 'E'],
@@ -27,8 +30,8 @@ export function zoneOf(point: Point, plot: { width: number; height: number }): Z
   return grid[row][col]
 }
 
-export function roomZone(room: PlanRoom, plot: { width: number; height: number }): Zone {
-  return zoneOf(center(room), plot)
+export function roomZone(room: PlanRoom, area: { x?: number; y?: number; width: number; height: number }): Zone {
+  return zoneOf(center(room), area)
 }
 
 // Extra rooms are recognised by type or by name, since the editor's room types are broad.
@@ -63,6 +66,8 @@ export interface CheckContext extends DesignCheckInput {
   allRooms: { room: PlanRoom; model: FloorModel }[]
   /** The master bedroom: named "master", else the largest bedroom in the building. */
   masterBedroomId: string | null
+  /** Outline of every room on every floor: the house's footprint, for Vastu zones. */
+  building: Rect | null
 }
 
 export function buildContext(input: DesignCheckInput): CheckContext {
@@ -78,6 +83,7 @@ export function buildContext(input: DesignCheckInput): CheckContext {
     lowest: models[0] ?? null,
     allRooms,
     masterBedroomId: master?.room.id ?? null,
+    building: unionRect(allRooms.map(({ room }) => room)),
   }
 }
 

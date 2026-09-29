@@ -367,6 +367,27 @@ function duplicateFloor(project: DemoProject, source: FloorDto, body: Body): Flo
   return { ...copy, rooms }
 }
 
+/** Swaps every floor and room of a project for a new plan, as the backend's PUT /layout does. */
+function replaceLayout(user: DemoUser, project: DemoProject, body: Body): ProjectDetailDto {
+  const floors = Array.isArray(body.floors) ? (body.floors as Body[]) : []
+  if (floors.length === 0 || floors.length > 4) fail(422, 'A layout needs between one and four floors.')
+  const levels = floors.map((f) => f.level)
+  if (new Set(levels).size !== levels.length) fail(422, 'Each floor needs its own level.')
+  // Check every floor before touching anything, so a bad one can't leave the plan half-replaced.
+  floors.forEach((f) => floorPlacement(f))
+  const data = database()
+  data.floors = data.floors.filter((f) => f.project_id !== project.id)
+  data.rooms = data.rooms.filter((r) => r.project_id !== project.id)
+  for (const layoutFloor of floors) {
+    const floor = createFloor(project, layoutFloor)
+    for (const room of Array.isArray(layoutFloor.rooms) ? (layoutFloor.rooms as Body[]) : []) {
+      createRoom(project, { ...room, floor_id: floor.id })
+    }
+  }
+  if (typeof body.note === 'string' && body.note) addActivity(project, user, body.note)
+  return projectDetail(project)
+}
+
 // --- routing --------------------------------------------------------------------------------
 
 function route(method: HttpMethod, segments: string[], body: Body, token: string | null): unknown {
@@ -401,6 +422,8 @@ function route(method: HttpMethod, segments: string[], body: Body, token: string
       }
       if (method === 'DELETE') return deleteProject(project)
     }
+
+    if (collection === 'layout' && method === 'PUT') return replaceLayout(user, project, body)
 
     if (collection === 'activity' && method === 'GET') {
       return database()

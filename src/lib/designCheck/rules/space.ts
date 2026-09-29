@@ -28,6 +28,9 @@ function minimumFor(room: PlanRoom, ctx: CheckContext): Minimum | null {
 
 const ft = (m: number) => `${(m * FT_PER_M).toFixed(1)} ft`
 
+/** Living rooms and bedrooms longer than twice their width are hard to furnish and feel like corridors. */
+const MAX_PROPORTION = 2
+
 /** Rooms big enough to use, and not overlapping each other. */
 export function spaceChecks(ctx: CheckContext): CheckResult[] {
   const results: CheckResult[] = []
@@ -56,6 +59,22 @@ export function spaceChecks(ctx: CheckContext): CheckResult[] {
       status: isBathroom(room) ? 'warn' : 'fail',
       title: `${room.name} is smaller than a ${minimum.label} should be`,
       detail: problems.join(', and ') + '.',
+      roomIds: [room.id],
+      floorId: model.floor.id,
+    })
+  }
+
+  for (const { room, model } of ctx.allRooms) {
+    if (room.type !== 'living' && room.type !== 'bedroom') continue
+    const long = Math.max(room.width, room.height)
+    const narrow = Math.min(room.width, room.height)
+    if (narrow <= 0 || long / narrow <= MAX_PROPORTION + 0.05) continue
+    results.push({
+      id: `space-proportion-${room.id}`,
+      category: 'space',
+      status: 'warn',
+      title: `${room.name} is long and narrow (${room.width.toFixed(1)} × ${room.height.toFixed(1)} ft)`,
+      detail: 'Rooms up to about twice as long as they are wide are easier to furnish.',
       roomIds: [room.id],
       floorId: model.floor.id,
     })

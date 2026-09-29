@@ -1,4 +1,4 @@
-import { ClipboardList, Columns2, FileStack, Grid3x3, IndianRupee, ListChecks, Minus, Plus, Ruler, Scaling, View } from 'lucide-react'
+import { ClipboardList, Columns2, FileStack, Grid3x3, IndianRupee, ListChecks, Minus, Plus, Ruler, Scaling, Sparkles, View } from 'lucide-react'
 import { FloorSwitcher } from '@/components/canvas/FloorSwitcher'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
@@ -25,11 +25,13 @@ interface CanvasToolbarProps {
   /** The live cost estimate; the toolbar shows its total, coloured by how it compares with the budget. */
   costEstimate?: BoqEstimate
   onOpenCostEstimate?: () => void
+  /** Opens the layout generator. */
+  onOpenGenerate?: () => void
 }
 
 const BUDGET_VARIANT = { within: 'success', close: 'warning', over: 'danger' } as const
 
-export function CanvasToolbar({ designReport, onOpenDesignCheck, costEstimate, onOpenCostEstimate }: CanvasToolbarProps) {
+export function CanvasToolbar({ designReport, onOpenDesignCheck, costEstimate, onOpenCostEstimate, onOpenGenerate }: CanvasToolbarProps) {
   const viewMode = useDesignStore((state) => state.viewMode)
   const setViewMode = useDesignStore((state) => state.setViewMode)
   const zoom = useDesignStore((state) => state.zoom)
@@ -53,6 +55,13 @@ export function CanvasToolbar({ designReport, onOpenDesignCheck, costEstimate, o
       <Divider orientation="vertical" className="h-6" />
 
       <SegmentedControl value={viewMode} onChange={setViewMode} options={VIEW_OPTIONS} />
+
+      {projectId && onOpenGenerate && (
+        <Button variant="outline" size="sm" onClick={onOpenGenerate} className="shrink-0 gap-2">
+          <Sparkles className="size-4" />
+          <span className="hidden sm:inline">Generate</span>
+        </Button>
+      )}
 
       {designReport && onOpenDesignCheck && designReport.categories.length > 0 && (
         <Button variant="outline" size="sm" onClick={onOpenDesignCheck} className="shrink-0 gap-2">

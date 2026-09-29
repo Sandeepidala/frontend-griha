@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react'
+import { Sparkles } from 'lucide-react'
 import { useParams } from 'react-router-dom'
 import { CanvasToolbar } from '@/components/canvas/CanvasToolbar'
 import { CostEstimatePanel } from '@/components/canvas/CostEstimatePanel'
 import { DesignCheckPanel } from '@/components/canvas/DesignCheckPanel'
+import { GeneratePanel } from '@/components/canvas/GeneratePanel'
 import { DrawingsWorkspace } from '@/components/drawings/DrawingsWorkspace'
 import { ModelViewer3D } from '@/components/canvas/ModelViewer3D'
 import { PlanCanvas2D } from '@/components/canvas/PlanCanvas2D'
@@ -26,6 +28,8 @@ export function ProjectWorkspace() {
   const designReport = useDesignReport(costEstimate)
   const [designCheckOpen, setDesignCheckOpen] = useState(false)
   const [costEstimateOpen, setCostEstimateOpen] = useState(false)
+  const [generateOpen, setGenerateOpen] = useState(false)
+  const planIsEmpty = useDesignStore((state) => state.floors.every((f) => f.rooms.length === 0))
 
   useEffect(() => {
     if (id) {
@@ -42,11 +46,30 @@ export function ProjectWorkspace() {
         onOpenDesignCheck={() => setDesignCheckOpen(true)}
         costEstimate={status === 'idle' ? costEstimate : undefined}
         onOpenCostEstimate={() => setCostEstimateOpen(true)}
+        onOpenGenerate={() => setGenerateOpen(true)}
       />
+      <GeneratePanel open={generateOpen} onClose={() => setGenerateOpen(false)} />
       <DesignCheckPanel open={designCheckOpen} onClose={() => setDesignCheckOpen(false)} report={designReport} />
       <CostEstimatePanel open={costEstimateOpen} onClose={() => setCostEstimateOpen(false)} />
       {status === 'idle' && viewMode !== 'drawings' && <SelectionToolbar />}
-      <div className="min-h-0 flex-1">
+      <div className="relative min-h-0 flex-1">
+        {status === 'idle' && planIsEmpty && viewMode !== 'drawings' && (
+          // A new project starts empty: offer to generate a plan from the brief.
+          <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center p-6">
+            <div className="pointer-events-auto flex max-w-sm flex-col items-center gap-3 rounded-lg border border-border bg-surface px-6 py-5 text-center shadow-md">
+              <Sparkles className="size-6 text-primary" />
+              <p className="font-display font-semibold text-text">Start from your brief</p>
+              <p className="text-sm text-text-muted">
+                Generate layout options for this plot, each checked against your brief and budget, or draw your own
+                with Add room.
+              </p>
+              <Button onClick={() => setGenerateOpen(true)} className="gap-2">
+                <Sparkles className="size-4" />
+                Generate layout options
+              </Button>
+            </div>
+          </div>
+        )}
         {status === 'loading' ? (
           <div className="flex h-full items-center justify-center">
             <Spinner size="lg" />

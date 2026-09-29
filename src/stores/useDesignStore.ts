@@ -101,6 +101,8 @@ interface DesignState {
   addFloor: () => Promise<void>
   removeFloor: (id: string) => Promise<void>
   duplicateFloor: (id: string) => Promise<void>
+  /** Swaps the whole plan (every floor and room) for another, e.g. a generated option. */
+  replaceLayout: (floors: Floor[], note?: string) => Promise<void>
   setActiveFloorId: (id: string) => void
   setViewMode: (mode: ViewMode) => void
   zoomIn: () => void
@@ -475,6 +477,21 @@ export const useDesignStore = create<DesignState>((set, get) => ({
     }
 
     set((state) => ({ floors: [...state.floors, clone], activeFloorId: clone.id, selection: null }))
+  },
+
+  replaceLayout: async (floors, note) => {
+    const { projectId } = get()
+    let next: Floor[]
+    if (projectId) {
+      // Batched edits belong to rooms about to be replaced; send them first so none land afterwards.
+      await flushSaves()
+      next = (await projectsApi.replaceLayout(projectId, floors, note)).floors
+      if (get().projectId !== projectId) return
+    } else {
+      next = floors.map((floor) => ({ ...floor, id: createId(), rooms: floor.rooms.map((r) => ({ ...r, id: createId() })) }))
+    }
+    const ground = next.find((f) => f.level === 0) ?? next[0]
+    set({ floors: next, activeFloorId: ground.id, selection: null })
   },
 
   setActiveFloorId: (id) => set({ activeFloorId: id, selection: null }),
