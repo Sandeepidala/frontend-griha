@@ -1,6 +1,7 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { CanvasToolbar } from '@/components/canvas/CanvasToolbar'
+import { DesignCheckPanel } from '@/components/canvas/DesignCheckPanel'
 import { DrawingsWorkspace } from '@/components/drawings/DrawingsWorkspace'
 import { ModelViewer3D } from '@/components/canvas/ModelViewer3D'
 import { PlanCanvas2D } from '@/components/canvas/PlanCanvas2D'
@@ -8,6 +9,7 @@ import { SelectionToolbar } from '@/components/canvas/SelectionToolbar'
 import { Navbar } from '@/components/layout/Navbar'
 import { Button } from '@/components/ui/Button'
 import { Spinner } from '@/components/ui/Spinner'
+import { useDesignReport } from '@/hooks/useDesignReport'
 import { useDesignStore } from '@/stores/useDesignStore'
 import { useProjectsStore } from '@/stores/useProjectsStore'
 
@@ -18,6 +20,8 @@ export function ProjectWorkspace() {
   const error = useDesignStore((state) => state.error)
   const loadProject = useDesignStore((state) => state.loadProject)
   const setActiveProject = useProjectsStore((state) => state.setActiveProject)
+  const designReport = useDesignReport()
+  const [designCheckOpen, setDesignCheckOpen] = useState(false)
 
   useEffect(() => {
     if (id) {
@@ -29,7 +33,11 @@ export function ProjectWorkspace() {
   return (
     <div className="flex h-svh flex-col">
       <Navbar />
-      <CanvasToolbar />
+      <CanvasToolbar
+        designReport={status === 'idle' ? designReport : undefined}
+        onOpenDesignCheck={() => setDesignCheckOpen(true)}
+      />
+      <DesignCheckPanel open={designCheckOpen} onClose={() => setDesignCheckOpen(false)} report={designReport} />
       {status === 'idle' && viewMode !== 'drawings' && <SelectionToolbar />}
       <div className="min-h-0 flex-1">
         {status === 'loading' ? (
