@@ -21,6 +21,11 @@ Connect this repo in Netlify and deploy: with no environment variables it runs i
 deployed, set `VITE_API_BASE_URL` (e.g. `https://<your-api>/api/v1`) in Site configuration → Environment variables and
 redeploy, and add the Netlify URL to the backend's `CORS_ORIGINS`.
 
+## Deploying to Vercel
+
+`vercel.json` rewrites every path to `index.html`, so browser routes like `/projects/<id>` load on refresh. Import the repo
+with the Vite preset; demo mode and `VITE_API_BASE_URL` work the same as on Netlify.
+
 ---
 
 ## Vite template notes
