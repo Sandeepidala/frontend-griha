@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import { Suspense, lazy, useState, type ReactNode } from 'react'
 import { IndianRupee, Minus, Plus, Ruler } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { Alert } from '@/components/ui/Alert'
@@ -25,17 +25,26 @@ import {
   floorsLabel,
 } from '@/lib/brief'
 import { formatCurrency } from '@/lib/format'
+import type { PlotFromBoundary } from '@/lib/geo/plot'
 import { useDesignStore } from '@/stores/useDesignStore'
 import { useProjectsStore } from '@/stores/useProjectsStore'
 import { toast } from '@/stores/useToastStore'
 import type { ExtraRoom, ProjectBrief } from '@/types/brief'
 import type { Plot } from '@/types/design'
-import type { ProjectSummary } from '@/types/project'
+import type { ProjectSummary, SiteLocation } from '@/types/project'
 import { FormField } from './FormField'
 
-const STEPS = ['Plot', 'Budget', 'Family & rooms', 'Style', 'Review'] as const
-type StepIndex = 0 | 1 | 2 | 3 | 4
-const REVIEW_STEP: StepIndex = 4
+// The map (MapLibre) loads only when the Location step opens.
+const LocationPicker = lazy(() => import('@/components/site/LocationPicker').then((m) => ({ default: m.LocationPicker })))
+
+const STEPS = ['Location', 'Plot', 'Budget', 'Family & rooms', 'Style', 'Review'] as const
+type StepIndex = 0 | 1 | 2 | 3 | 4 | 5
+const LOCATION_STEP: StepIndex = 0
+const PLOT_STEP: StepIndex = 1
+const BUDGET_STEP: StepIndex = 2
+const ROOMS_STEP: StepIndex = 3
+const STYLE_STEP: StepIndex = 4
+const REVIEW_STEP: StepIndex = 5
 
 interface FormState {
   name: string
@@ -46,6 +55,7 @@ interface FormState {
   turnkey: boolean
   notes: string
   brief: ProjectBrief
+  site: SiteLocation | null
 }
 
 const NEW_PROJECT_FORM: FormState = {
@@ -57,6 +67,7 @@ const NEW_PROJECT_FORM: FormState = {
   turnkey: false,
   notes: '',
   brief: DEFAULT_BRIEF,
+  site: null,
 }
 
 function formFromProject(project: ProjectSummary): FormState {
@@ -69,20 +80,28 @@ function formFromProject(project: ProjectSummary): FormState {
     turnkey: project.turnkey,
     notes: project.notes ?? '',
     brief: project.brief,
+    site: project.site,
   }
+}
+
+/** The site's state as the brief records it: the Indian list's spelling in India, else as the map gave it. */
+function matchState(site: SiteLocation): string | null {
+  if (!site.state) return null
+  if (site.countryCode && site.countryCode !== 'IN') return site.state
+  return INDIAN_STATES.find((s) => s.toLowerCase() === site.state!.toLowerCase()) ?? null
 }
 
 const FACING_LABELS: Record<Plot['facing'], string> = { north: 'North', south: 'South', east: 'East', west: 'West' }
 
 /** Returns an error message for the first problem on a step, or null when it's complete. */
 function validateStep(step: StepIndex, form: FormState): string | null {
-  if (step === 0) {
+  if (step === PLOT_STEP) {
     if (!form.name.trim()) return 'Give your project a name to continue.'
     if (!(Number(form.plotWidth) > 0) || !(Number(form.plotHeight) > 0)) return 'Enter valid plot dimensions.'
     if (form.brief.plotShape !== 'rectangular' && !form.brief.plotShapeNotes?.trim())
       return 'Describe how the plot differs from a rectangle, so the design team can account for it.'
   }
-  if (step === 1 && !(Number(form.budget) > 0)) return 'Enter a budget amount.'
+  if (step === BUDGET_STEP && !(Number(form.budget) > 0)) return 'Enter a budget amount.'
   return null
 }
 
@@ -167,6 +186,31 @@ export function ProjectBriefPanel() {
   const setBrief = (patch: Partial<ProjectBrief>) => setForm((prev) => ({ ...prev, brief: { ...prev.brief, ...patch } }))
   const brief = form.brief
 
+  function setSite(site: SiteLocation | null) {
+    setForm((prev) => ({
+      ...prev,
+      site,
+      brief: site ? { ...prev.brief, state: matchState(site) ?? prev.brief.state, city: site.city ?? prev.brief.city } : prev.brief,
+    }))
+  }
+
+  function applyPlotFromMap(plot: PlotFromBoundary) {
+    setForm((prev) => ({
+      ...prev,
+      plotWidth: String(plot.width),
+      plotHeight: String(plot.height),
+      facing: plot.facing,
+      brief: {
+        ...prev.brief,
+        plotShape: plot.shape,
+        plotShapeNotes:
+          plot.shape === 'rectangular' ? null : `Sides measured on the map, in order from the road side: ${plot.sidesFt.map((s) => `${s} ft`).join(', ')}.`,
+      },
+    }))
+    toast.success('Plot size, facing and shape filled in from the map. Check them on the next step.')
+    goTo(PLOT_STEP)
+  }
+
   function toggleRoom(room: ExtraRoom) {
     setBrief({
       extraRooms: brief.extraRooms.includes(room)
@@ -187,7 +231,7 @@ export function ProjectBriefPanel() {
   }
 
   async function handleSubmit() {
-    for (const s of [0, 1, 2, 3] as StepIndex[]) {
+    for (const s of [LOCATION_STEP, PLOT_STEP, BUDGET_STEP, ROOMS_STEP, STYLE_STEP]) {
       const problem = validateStep(s, form)
       if (problem) {
         setStep(s)
@@ -202,6 +246,7 @@ export function ProjectBriefPanel() {
       budget: Number(form.budget),
       turnkey: form.turnkey,
       notes: form.notes.trim() || undefined,
+      site: form.site,
       brief: {
         ...brief,
         city: brief.city?.trim() || null,
@@ -274,7 +319,19 @@ export function ProjectBriefPanel() {
       </Alert>
 
       <div className="flex flex-col gap-5 px-5 py-4">
-        {step === 0 && (
+        {step === LOCATION_STEP && (
+          <>
+            <p className="text-sm text-text-muted">
+              Find the plot on the map. Marking its corners measures it and sets which way it faces; you can also skip this and
+              enter the plot by hand.
+            </p>
+            <Suspense fallback={<div className="h-72 animate-pulse rounded-md bg-surface-2" />}>
+              <LocationPicker value={form.site} onChange={setSite} onUsePlot={applyPlotFromMap} />
+            </Suspense>
+          </>
+        )}
+
+        {step === PLOT_STEP && (
           <>
             <FormField label="Project name" required>
               <Input
@@ -351,15 +408,19 @@ export function ProjectBriefPanel() {
               />
             </FormField>
             <div className="grid grid-cols-2 gap-4">
-              <FormField label="State" hint="For local rates and building rules">
-                <Select value={brief.state ?? ''} onChange={(event) => setBrief({ state: event.target.value || null })}>
-                  <option value="">Select state</option>
-                  {INDIAN_STATES.map((state) => (
-                    <option key={state} value={state}>
-                      {state}
-                    </option>
-                  ))}
-                </Select>
+              <FormField label={form.site?.countryCode && form.site.countryCode !== 'IN' ? 'State / region' : 'State'} hint="For local rates and building rules">
+                {form.site?.countryCode && form.site.countryCode !== 'IN' ? (
+                  <Input value={brief.state ?? ''} onChange={(event) => setBrief({ state: event.target.value || null })} />
+                ) : (
+                  <Select value={brief.state ?? ''} onChange={(event) => setBrief({ state: event.target.value || null })}>
+                    <option value="">Select state</option>
+                    {INDIAN_STATES.map((state) => (
+                      <option key={state} value={state}>
+                        {state}
+                      </option>
+                    ))}
+                  </Select>
+                )}
               </FormField>
               <FormField label="City / town">
                 <Input
@@ -372,7 +433,7 @@ export function ProjectBriefPanel() {
           </>
         )}
 
-        {step === 1 && (
+        {step === BUDGET_STEP && (
           <>
             <FormField
               label="Total budget"
@@ -402,7 +463,7 @@ export function ProjectBriefPanel() {
           </>
         )}
 
-        {step === 2 && (
+        {step === ROOMS_STEP && (
           <>
             <div className="flex flex-col gap-1.5">
               <span className="text-sm font-medium text-text">Floors</span>
@@ -474,7 +535,7 @@ export function ProjectBriefPanel() {
           </>
         )}
 
-        {step === 3 && (
+        {step === STYLE_STEP && (
           <>
             <FormField label="Style">
               <Select value={brief.style} onChange={(event) => setBrief({ style: event.target.value as ProjectBrief['style'] })}>
@@ -510,7 +571,11 @@ export function ProjectBriefPanel() {
 
         {step === REVIEW_STEP && (
           <>
-            <ReviewSection title="Plot" onEdit={() => goTo(0)}>
+            <ReviewSection title="Location" onEdit={() => goTo(LOCATION_STEP)}>
+              <ReviewRow label="Address" value={form.site?.formattedAddress || (form.site ? `${form.site.lat.toFixed(5)}, ${form.site.lng.toFixed(5)}` : 'Not set')} />
+              {form.site?.boundary && <ReviewRow label="Boundary" value={`Marked on the map (${form.site.boundary.length} corners)`} />}
+            </ReviewSection>
+            <ReviewSection title="Plot" onEdit={() => goTo(PLOT_STEP)}>
               <ReviewRow label="Project" value={form.name || '—'} />
               <ReviewRow
                 label="Size"
@@ -520,11 +585,11 @@ export function ProjectBriefPanel() {
               <ReviewRow label="Road width" value={brief.roadWidthFt ? `${brief.roadWidthFt} ft` : 'Not given'} />
               <ReviewRow label="Location" value={[brief.city, brief.state].filter(Boolean).join(', ') || 'Not given'} />
             </ReviewSection>
-            <ReviewSection title="Budget" onEdit={() => goTo(1)}>
+            <ReviewSection title="Budget" onEdit={() => goTo(BUDGET_STEP)}>
               <ReviewRow label="Amount" value={Number(form.budget) > 0 ? formatCurrency(Number(form.budget)) : '—'} />
               <ReviewRow label="Covers" value={form.turnkey ? 'Turnkey' : 'Construction only'} />
             </ReviewSection>
-            <ReviewSection title="Family & rooms" onEdit={() => goTo(2)}>
+            <ReviewSection title="Family & rooms" onEdit={() => goTo(ROOMS_STEP)}>
               <ReviewRow label="Floors" value={floorsLabel(brief.floors)} />
               <ReviewRow label="Bedrooms / bathrooms" value={`${brief.bedrooms} / ${brief.bathrooms}`} />
               <ReviewRow
@@ -537,7 +602,7 @@ export function ProjectBriefPanel() {
                 value={`${brief.familySize} members · ${brief.familyType === 'joint' ? 'Joint' : 'Nuclear'}${brief.needsGroundFloorBedroom ? ' · Ground-floor bedroom' : ''}`}
               />
             </ReviewSection>
-            <ReviewSection title="Style" onEdit={() => goTo(3)}>
+            <ReviewSection title="Style" onEdit={() => goTo(STYLE_STEP)}>
               <ReviewRow label="Style" value={styleLabel} />
               <ReviewRow label="Vastu" value={brief.vastu ? 'Follow guidelines' : 'Not required'} />
               {form.notes.trim() && <ReviewRow label="Notes" value={form.notes.trim()} />}

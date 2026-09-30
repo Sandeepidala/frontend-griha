@@ -237,7 +237,8 @@ export function AccountSettings() {
               <p className="text-sm text-text-muted">
                 Your plot details, budget and designs are only used to design your home, travel encrypted (HTTPS) and are stored in an
                 encrypted database. We don't share them with anyone without your consent; an architect sees a project only if you request
-                a review.
+                a review. Finding your plot on the map sends the search text or the pin's position (never your name) to the map
+                provider.
               </p>
             </div>
           </div>

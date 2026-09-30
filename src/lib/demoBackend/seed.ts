@@ -62,6 +62,7 @@ export const PROJECT_DEFAULTS = {
   setback_right: 2,
   turnkey: false,
   brief: briefToDto(DEFAULT_BRIEF),
+  site: null,
   notes: null,
   status: 'draft',
 } satisfies Partial<ProjectDto>

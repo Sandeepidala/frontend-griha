@@ -1,4 +1,4 @@
-import { ClipboardList, Columns2, FileStack, Grid3x3, IndianRupee, ListChecks, Minus, Plus, Ruler, Scaling, ShieldCheck, Sparkles, View } from 'lucide-react'
+import { ClipboardList, Columns2, FileStack, Grid3x3, IndianRupee, ListChecks, MapPinned, Minus, Plus, Ruler, Scaling, ShieldCheck, Sparkles, View } from 'lucide-react'
 import { FloorSwitcher } from '@/components/canvas/FloorSwitcher'
 import { ReviewStatusBadge } from '@/components/reviews/ReviewParts'
 import { Badge } from '@/components/ui/Badge'
@@ -18,6 +18,7 @@ const VIEW_OPTIONS: { value: ViewMode; label: string; icon: typeof View }[] = [
   { value: '3d', label: '3D View', icon: View },
   { value: 'split', label: 'Split', icon: Columns2 },
   { value: 'drawings', label: 'Drawings', icon: FileStack },
+  { value: 'site', label: 'Site', icon: MapPinned },
 ]
 
 interface CanvasToolbarProps {

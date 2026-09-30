@@ -3,12 +3,14 @@ import { mapFloor, type FloorDto } from './floorsApi'
 import { formatRelativeTime } from './format'
 import { mapRoom, toRoomBody, type RoomDto } from './roomsApi'
 import type {
+  LatLng,
   NewProjectInput,
   ProjectBriefUpdate,
   ProjectDetail,
   ProjectStatus,
   ProjectSummary,
   ActivityLogEntry,
+  SiteLocation,
 } from '@/types/project'
 import type { DesignStyle, ExtraRoom, FamilyType, KitchenType, PlotShape, ProjectBrief } from '@/types/brief'
 import type { Floor, LengthUnit, Plot } from '@/types/design'
@@ -78,6 +80,66 @@ export function briefToDto(brief: ProjectBrief): BriefDto {
   }
 }
 
+export interface SiteDto {
+  provider: SiteLocation['provider']
+  place_id: string | null
+  formatted_address: string | null
+  lat: number
+  lng: number
+  country: string | null
+  country_code: string | null
+  state: string | null
+  city: string | null
+  postcode: string | null
+  locality: string | null
+  boundary: LatLng[] | null
+  road_edge: number | null
+  rotation_deg: number | null
+  origin: LatLng | null
+}
+
+export function mapSite(dto: SiteDto | null | undefined): SiteLocation | null {
+  if (!dto) return null
+  return {
+    provider: dto.provider,
+    placeId: dto.place_id,
+    formattedAddress: dto.formatted_address,
+    lat: dto.lat,
+    lng: dto.lng,
+    country: dto.country,
+    countryCode: dto.country_code,
+    state: dto.state,
+    city: dto.city,
+    postcode: dto.postcode,
+    locality: dto.locality,
+    boundary: dto.boundary,
+    roadEdge: dto.road_edge,
+    rotationDeg: dto.rotation_deg,
+    origin: dto.origin,
+  }
+}
+
+export function siteToDto(site: SiteLocation | null): SiteDto | null {
+  if (!site) return null
+  return {
+    provider: site.provider,
+    place_id: site.placeId,
+    formatted_address: site.formattedAddress,
+    lat: site.lat,
+    lng: site.lng,
+    country: site.country,
+    country_code: site.countryCode,
+    state: site.state,
+    city: site.city,
+    postcode: site.postcode,
+    locality: site.locality,
+    boundary: site.boundary,
+    road_edge: site.roadEdge,
+    rotation_deg: site.rotationDeg,
+    origin: site.origin,
+  }
+}
+
 export interface ProjectDto {
   id: string
   name: string
@@ -92,6 +154,8 @@ export interface ProjectDto {
   budget: number
   turnkey: boolean
   brief: BriefDto
+  /** Missing from demo projects saved before locations existed. */
+  site?: SiteDto | null
   notes: string | null
   status: ProjectStatus
   created_at: string
@@ -122,6 +186,7 @@ function mapProject(dto: ProjectDto): ProjectSummary {
     budget: dto.budget,
     turnkey: dto.turnkey,
     brief: mapBrief(dto.brief),
+    site: mapSite(dto.site),
     notes: dto.notes ?? undefined,
     status: dto.status,
     createdAt: dto.created_at,
@@ -147,6 +212,7 @@ function projectBody(input: NewProjectInput | ProjectBriefUpdate) {
     budget: input.budget,
     turnkey: input.turnkey,
     brief: briefToDto(input.brief),
+    site: siteToDto(input.site),
     notes: input.notes ?? null,
   }
 }

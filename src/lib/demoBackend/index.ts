@@ -3,6 +3,7 @@ import type { HttpMethod } from '../apiClient'
 import type { AuthResponseDto, UserDto } from '../authApi'
 import type { FloorDto, FloorWithRoomsDto } from '../floorsApi'
 import type { BriefDto, ProjectDetailDto, ProjectDto } from '../projectsApi'
+import { handleDemoGeo } from './geo'
 import type { ReviewDetailDto, ReviewPartyDto, ReviewQuoteDto, ReviewSummaryDto } from '../reviewsApi'
 import type { RoomDto } from '../roomsApi'
 import { DEMO_ARCHITECT_EMAIL } from '../dataMode'
@@ -258,6 +259,7 @@ const PROJECT_FIELDS = [
   'budget',
   'turnkey',
   'brief',
+  'site',
   'notes',
   'status',
 ] as const satisfies readonly (keyof ProjectDto)[]
@@ -266,7 +268,7 @@ const PROJECT_FIELDS = [
 function projectChanges(body: Body): Partial<ProjectDto> {
   const changes = pick<ProjectDto>(body, PROJECT_FIELDS)
   for (const key of Object.keys(changes) as (keyof ProjectDto)[]) {
-    if (changes[key] === null && key !== 'notes') delete changes[key]
+    if (changes[key] === null && key !== 'notes' && key !== 'site') delete changes[key]
   }
   if (changes.name !== undefined && !String(changes.name).trim()) fail(422, 'Enter a project name.')
   if (changes.brief) changes.brief = completeBrief(changes.brief)
@@ -732,7 +734,12 @@ export async function handleDemoRequest(
 ): Promise<unknown> {
   // Round-trip the body as the network would, so undefined fields are dropped the same way.
   const payload = body === undefined ? {} : (JSON.parse(JSON.stringify(body)) as Body)
-  const segments = path.split('?')[0].split('/').filter(Boolean)
+  const [pathname, search = ''] = path.split('?')
+  const segments = pathname.split('/').filter(Boolean)
+  if (segments[0] === 'geo') {
+    currentUser(token)
+    return handleDemoGeo(segments, new URLSearchParams(search))
+  }
   const result = route(method, segments, payload, token)
   if (method !== 'GET') persist()
   // Hand back copies, so callers can never mutate the stored records directly.

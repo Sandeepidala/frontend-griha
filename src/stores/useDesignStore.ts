@@ -69,7 +69,7 @@ const DEFAULT_PLOT: Plot = {
   setbacks: { front: 3, rear: 2, left: 2, right: 2 },
 }
 
-export type ViewMode = '2d' | '3d' | 'split' | 'drawings'
+export type ViewMode = '2d' | '3d' | 'split' | 'drawings' | 'site'
 
 const MIN_ZOOM = 0.5
 const MAX_ZOOM = 2.5

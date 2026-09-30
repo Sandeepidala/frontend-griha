@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { Suspense, lazy, useEffect, useState } from 'react'
 import { Sparkles } from 'lucide-react'
 import { useParams } from 'react-router-dom'
 import { CanvasToolbar } from '@/components/canvas/CanvasToolbar'
@@ -18,6 +18,9 @@ import { useDesignReport } from '@/hooks/useDesignReport'
 import { useDesignStore } from '@/stores/useDesignStore'
 import { useProjectsStore } from '@/stores/useProjectsStore'
 import type { Review } from '@/types/review'
+
+// The map (MapLibre) loads only when the Site view opens.
+const SiteMapView = lazy(() => import('@/components/site/SiteMapView').then((m) => ({ default: m.SiteMapView })))
 
 export function ProjectWorkspace() {
   const { id } = useParams<{ id: string }>()
@@ -58,9 +61,9 @@ export function ProjectWorkspace() {
       <DesignCheckPanel open={designCheckOpen} onClose={() => setDesignCheckOpen(false)} report={designReport} />
       <CostEstimatePanel open={costEstimateOpen} onClose={() => setCostEstimateOpen(false)} />
       {status === 'idle' && <ReviewPanel key={id} open={reviewOpen} onClose={() => setReviewOpen(false)} onChange={setLatestReview} />}
-      {status === 'idle' && viewMode !== 'drawings' && <SelectionToolbar />}
+      {status === 'idle' && viewMode !== 'drawings' && viewMode !== 'site' && <SelectionToolbar />}
       <div className="relative min-h-0 flex-1">
-        {status === 'idle' && planIsEmpty && viewMode !== 'drawings' && (
+        {status === 'idle' && planIsEmpty && viewMode !== 'drawings' && viewMode !== 'site' && (
           // A new project starts empty: offer to generate a plan from the brief.
           <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center p-6">
             <div className="pointer-events-auto flex max-w-sm flex-col items-center gap-3 rounded-lg border border-border bg-surface px-6 py-5 text-center shadow-md">
@@ -91,6 +94,11 @@ export function ProjectWorkspace() {
             {viewMode === '2d' && <PlanCanvas2D />}
             {viewMode === '3d' && <ModelViewer3D />}
             {viewMode === 'drawings' && <DrawingsWorkspace />}
+            {viewMode === 'site' && (
+              <Suspense fallback={<div className="flex h-full items-center justify-center"><Spinner size="lg" /></div>}>
+                <SiteMapView />
+              </Suspense>
+            )}
             {viewMode === 'split' && (
               <div className="flex h-full flex-col md:flex-row">
                 <div className="min-h-0 min-w-0 flex-1 border-b border-border md:border-r md:border-b-0">
