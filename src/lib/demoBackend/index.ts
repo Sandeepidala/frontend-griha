@@ -741,7 +741,7 @@ export async function handleDemoRequest(
   const segments = pathname.split('/').filter(Boolean)
   if (segments[0] === 'geo') {
     currentUser(token)
-    return handleDemoGeo(segments, new URLSearchParams(search))
+    return handleDemoGeo(segments, new URLSearchParams(search), payload)
   }
   const result = route(method, segments, payload, token)
   if (method !== 'GET') persist()

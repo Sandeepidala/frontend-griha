@@ -13,6 +13,7 @@ export function useDesignReport(estimate?: BoqEstimate): DesignReport {
   const floors = useDesignStore((state) => state.floors)
   const projectId = useDesignStore((state) => state.projectId)
   const brief = useProjectsStore((state) => state.projects.find((p) => p.id === projectId)?.brief ?? null)
+  const site = useProjectsStore((state) => state.projects.find((p) => p.id === projectId)?.site ?? null)
   const total = estimate?.total
   const budget = estimate?.budget?.amount
   const turnkey = estimate?.includeInteriors ?? false
@@ -23,7 +24,8 @@ export function useDesignReport(estimate?: BoqEstimate): DesignReport {
         floors,
         brief,
         cost: total !== undefined && budget !== undefined ? { estimate: total, budget, turnkey } : null,
+        site,
       }),
-    [plot, floors, brief, total, budget, turnkey],
+    [plot, floors, brief, total, budget, turnkey, site],
   )
 }

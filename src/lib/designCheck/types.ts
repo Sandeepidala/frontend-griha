@@ -1,5 +1,6 @@
 import type { ProjectBrief } from '@/types/brief'
 import type { Floor, Plot } from '@/types/design'
+import type { SiteLocation } from '@/types/project'
 
 export type CheckStatus = 'pass' | 'warn' | 'fail'
 
@@ -53,4 +54,6 @@ export interface DesignCheckInput {
   brief: ProjectBrief | null
   /** The cost estimate against the budget (from lib/boq); without it the budget check is skipped. */
   cost?: { estimate: number; budget: number; turnkey: boolean } | null
+  /** Where the plot is and what was read about it (soil, road level, nearby features). */
+  site?: SiteLocation | null
 }

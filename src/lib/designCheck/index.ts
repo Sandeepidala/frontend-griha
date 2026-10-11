@@ -4,6 +4,7 @@ import { complianceChecks } from './rules/compliance'
 import { lightChecks } from './rules/light'
 import { privacyChecks } from './rules/privacy'
 import { requirementChecks } from './rules/requirements'
+import { groundChecks } from './rules/ground'
 import { siteChecks } from './rules/site'
 import { spaceChecks } from './rules/space'
 import { vastuChecks } from './rules/vastu'
@@ -50,7 +51,7 @@ export function runDesignCheck(input: DesignCheckInput): DesignReport {
     light: lightChecks(ctx),
     privacy: privacyChecks(ctx),
     vastu: input.brief?.vastu ? vastuChecks(ctx) : [],
-    site: siteChecks(ctx),
+    site: [...siteChecks(ctx), ...groundChecks(ctx)],
     budget: input.cost && input.cost.budget > 0 ? budgetChecks(input.cost) : [],
     compliance: complianceChecks(ctx),
   }

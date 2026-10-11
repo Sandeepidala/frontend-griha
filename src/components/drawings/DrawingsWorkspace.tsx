@@ -101,17 +101,20 @@ export function DrawingsWorkspace() {
   const project = useActiveProject()
   const userName = useAuthStore((state) => state.user?.name)
 
-  const register = useMemo(() => sheetRegister(floors), [floors])
+  const hasSiteReport = Boolean(project?.site?.report)
+  const register = useMemo(() => sheetRegister(floors, { siteReport: hasSiteReport }), [floors, hasSiteReport])
   const brief = project?.brief ?? null
   const budget = project?.budget
   const turnkey = project?.turnkey
+  const site = project?.site ?? null
   const set = useMemo(
     () =>
       buildDrawingSet(plot, floors, project?.name ?? 'Untitled project', userName ?? 'Griha', {
         brief,
         budget: budget !== undefined && turnkey !== undefined ? { amount: budget, turnkey } : null,
+        site,
       }),
-    [plot, floors, project?.name, userName, brief, budget, turnkey],
+    [plot, floors, project?.name, userName, brief, budget, turnkey, site],
   )
   const index = Math.max(0, register.findIndex((s) => s.id === activeSheetId))
   const sheet = register[index]

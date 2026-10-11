@@ -1,5 +1,6 @@
 import type { ProjectBrief } from './brief'
 import type { Floor, LengthUnit, Plot, Setbacks } from './design'
+import type { SiteDetails, SiteReport } from './site'
 
 export interface LatLng {
   lat: number
@@ -28,6 +29,10 @@ export interface SiteLocation {
   rotationDeg: number | null
   /** Where the plan's north-west corner (x=0, y=0) is on the ground. */
   origin: LatLng | null
+  /** What the map and open data say about the site. */
+  report: SiteReport | null
+  /** What the customer confirmed or entered (road width, soil test, utilities). */
+  details: SiteDetails | null
 }
 
 export type ProjectStatus = 'draft' | 'generating' | 'in_review' | 'ready'

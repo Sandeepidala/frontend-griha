@@ -1,4 +1,5 @@
 import type { ProjectBrief } from '@/types/brief'
+import type { SiteLocation } from '@/types/project'
 import type { Floor, Plot } from '@/types/design'
 import { type FloorModel, buildBuildingModel, sortFloors } from './geometry'
 import { type PlacedItem, layoutFloor } from './interior'
@@ -9,6 +10,7 @@ export type DisciplineId = 'general' | 'site' | 'architectural' | 'structural' |
 export type SheetKind =
   | 'summary'
   | 'estimate'
+  | 'site-report'
   | 'site-layout'
   | 'setbacks'
   | 'landscaping'
@@ -83,13 +85,15 @@ function sheet(
 }
 
 /** The drawing register: every sheet in the set, grouped by discipline in issue order. */
-export function sheetRegister(floors: Floor[]): SheetDef[] {
+/** `siteReport`: the project has a site report (location step), so the set includes its sheet. */
+export function sheetRegister(floors: Floor[], options: { siteReport?: boolean } = {}): SheetDef[] {
   const plans = sortFloors(floors).map((floor, i) =>
     sheet('architectural', 'floor-plan', `A-${101 + i}`, `${floor.name} Plan`, { floorId: floor.id }),
   )
   return [
     sheet('general', 'summary', 'G-001', 'Project Summary'),
     sheet('general', 'estimate', 'G-002', 'Cost Estimate', { perFloor: true }),
+    ...(options.siteReport ? [sheet('general', 'site-report', 'G-003', 'Site Report')] : []),
     sheet('site', 'site-layout', 'SP-01', 'Site Layout'),
     sheet('site', 'setbacks', 'SP-02', 'Setbacks'),
     sheet('site', 'landscaping', 'SP-03', 'Landscaping'),
@@ -130,6 +134,8 @@ export interface DrawingSet {
   /** The customer's brief and budget, for the summary and cost sheets. */
   brief: ProjectBrief | null
   budget: { amount: number; turnkey: boolean } | null
+  /** Where the plot is and what was read about it, for the Site report and the soil allowance. */
+  site: SiteLocation | null
 }
 
 export function buildDrawingSet(
@@ -137,7 +143,7 @@ export function buildDrawingSet(
   floors: Floor[],
   projectName: string,
   author: string,
-  project: { brief?: ProjectBrief | null; budget?: { amount: number; turnkey: boolean } | null } = {},
+  project: { brief?: ProjectBrief | null; budget?: { amount: number; turnkey: boolean } | null; site?: SiteLocation | null } = {},
 ): DrawingSet {
   const models = buildBuildingModel(floors, plot)
   const items = new Map(models.map((m) => [m.floor.id, layoutFloor(m)]))
@@ -150,6 +156,7 @@ export function buildDrawingSet(
     author,
     date: new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }),
     brief: project.brief ?? null,
+    site: project.site ?? null,
     budget: project.budget ?? null,
   }
 }

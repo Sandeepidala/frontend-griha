@@ -30,6 +30,8 @@ export const RATES = {
   pcc: { label: 'PCC 1:4:8 bed under footings (100 mm)', unit: 'cum', rate: 6200 },
   rccFooting: { label: 'RCC M20 isolated footings, incl. steel', unit: 'cum', rate: 10500 },
   plinthFilling: { label: 'Plinth filling, soling and PCC base for flooring', unit: 'sqft', rate: 55 },
+  // Priced as a share of the foundation work (lib/site foundationAllowance), not per unit.
+  soilAllowance: { label: 'Allowance for the soil', unit: 'LS', rate: 1 },
   // Frame
   rccColumn: { label: 'RCC M20 columns, incl. steel and formwork', unit: 'cum', rate: 13500 },
   rccBeam: { label: 'RCC M20 beams (plinth and floor), incl. steel and formwork', unit: 'cum', rate: 13000 },

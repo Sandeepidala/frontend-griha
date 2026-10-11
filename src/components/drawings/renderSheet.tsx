@@ -2,7 +2,7 @@ import type { ComponentType } from 'react'
 import type { SheetKind } from '@/lib/drawings/sheets'
 import { ElevationsSheet, FloorPlanSheet, RoofPlanSheet, SectionsSheet } from './sheets/ArchitecturalSheets'
 import type { SheetProps } from './sheets/common'
-import { EstimateSheet, SummarySheet } from './sheets/GeneralSheets'
+import { EstimateSheet, SiteReportSheet, SummarySheet } from './sheets/GeneralSheets'
 import { ElectricalLayoutSheet, LightingSheet, PowerSheet } from './sheets/ElectricalSheets'
 import { FalseCeilingSheet, FurnitureSheet, KitchenSheet } from './sheets/InteriorSheets'
 import { DrainageSheet, SanitarySheet, WaterSupplySheet } from './sheets/PlumbingSheets'
@@ -15,6 +15,7 @@ export type { SheetProps }
 export const SHEET_COMPONENTS: Partial<Record<SheetKind, ComponentType<SheetProps>>> = {
   summary: SummarySheet,
   estimate: EstimateSheet,
+  'site-report': SiteReportSheet,
   'site-layout': SiteLayoutSheet,
   setbacks: SetbacksSheet,
   landscaping: LandscapingSheet,

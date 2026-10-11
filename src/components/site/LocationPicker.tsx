@@ -6,9 +6,10 @@ import { Input } from '@/components/ui/Input'
 import { SegmentedControl } from '@/components/ui/SegmentedControl'
 import { ApiError } from '@/lib/apiError'
 import { type GeoPlace, type GeoSuggestion, type MapConfig, getMapConfig, newSearchSession, placeDetails, reverseGeocode, searchPlaces } from '@/lib/geo/api'
-import { type PlotFromBoundary, plotFromBoundary } from '@/lib/geo/plot'
+import { type PlotFromBoundary, plotFromBoundary, toLocal } from '@/lib/geo/plot'
 import { formatFeet } from '@/lib/drawings/geometry'
 import type { LatLng, SiteLocation } from '@/types/project'
+import { EMPTY_SITE_DETAILS } from '@/types/site'
 
 interface LocationPickerProps {
   value: SiteLocation | null
@@ -17,7 +18,7 @@ interface LocationPickerProps {
   onUsePlot: (plot: PlotFromBoundary) => void
 }
 
-type Step = 'pin' | 'corners' | 'road' | 'done'
+type Step = 'pin' | 'corners' | 'road' | 'measure' | 'done'
 type Basemap = 'satellite' | 'streets'
 
 const EMPTY = { type: 'FeatureCollection' as const, features: [] }
@@ -33,6 +34,7 @@ function styleFor(config: MapConfig): StyleSpecification {
       plot: { type: 'geojson', data: EMPTY },
       edges: { type: 'geojson', data: EMPTY },
       corners: { type: 'geojson', data: EMPTY },
+      measure: { type: 'geojson', data: EMPTY },
     },
     layers: [
       { id: 'satellite', type: 'raster', source: 'satellite' },
@@ -48,6 +50,8 @@ function styleFor(config: MapConfig): StyleSpecification {
         },
       },
       { id: 'corners', type: 'circle', source: 'corners', paint: { 'circle-radius': 5, 'circle-color': '#ffffff', 'circle-stroke-color': '#1d1d1f', 'circle-stroke-width': 2 } },
+      { id: 'measure-line', type: 'line', source: 'measure', paint: { 'line-color': '#29b6f6', 'line-width': 3, 'line-dasharray': [2, 1] } },
+      { id: 'measure-points', type: 'circle', source: 'measure', filter: ['==', ['geometry-type'], 'Point'], paint: { 'circle-radius': 5, 'circle-color': '#29b6f6', 'circle-stroke-color': '#ffffff', 'circle-stroke-width': 2 } },
     ],
   }
 }
@@ -69,6 +73,8 @@ function siteFromPlace(place: GeoPlace): SiteLocation {
     roadEdge: null,
     rotationDeg: null,
     origin: null,
+    report: null,
+    details: null,
   }
 }
 
@@ -98,9 +104,11 @@ export function LocationPicker({ value, onChange, onUsePlot }: LocationPickerPro
   const [roadEdge, setRoadEdge] = useState<number | null>(value?.roadEdge ?? null)
   const [step, setStep] = useState<Step>(value?.boundary && value.roadEdge !== null ? 'done' : 'pin')
   const [hoverEdge, setHoverEdge] = useState<number | null>(null)
+  // Two clicks across the road in front, for its width.
+  const [measure, setMeasure] = useState<LatLng[]>([])
   // The latest values for map event handlers, which are registered once.
-  const live = useRef({ step, corners, value, onChange })
-  live.current = { step, corners, value, onChange }
+  const live = useRef({ step, corners, value, onChange, measure })
+  live.current = { step, corners, value, onChange, measure }
 
   const derived = corners.length >= 3 && roadEdge !== null ? plotFromBoundary(corners, roadEdge) : null
 
@@ -143,8 +151,15 @@ export function LocationPicker({ value, onChange, onUsePlot }: LocationPickerPro
         const hit = map.queryRenderedFeatures(event.point, { layers: ['edges'] })[0]
         if (hit) {
           setRoadEdge(Number(hit.properties?.index))
-          setStep('done')
+          setMeasure([])
+          setStep('measure')
         }
+        return
+      }
+      if (current === 'measure') {
+        const next = [...live.current.measure, point].slice(-2)
+        setMeasure(next)
+        if (next.length === 2) recordRoadWidth(next)
         return
       }
       if (current === 'pin') void placePin(point)
@@ -214,6 +229,23 @@ export function LocationPicker({ value, onChange, onUsePlot }: LocationPickerPro
     if (map.isStyleLoaded()) draw()
     else map.once('load', draw)
   }, [corners, roadEdge, hoverEdge, step, config])
+
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map) return
+    const draw = () => {
+      const pts = measure.map((p) => [p.lng, p.lat] as [number, number])
+      ;(map.getSource('measure') as GeoJSONSource | undefined)?.setData({
+        type: 'FeatureCollection',
+        features: [
+          ...pts.map((c) => ({ type: 'Feature' as const, properties: {}, geometry: { type: 'Point' as const, coordinates: c } })),
+          ...(pts.length === 2 ? [{ type: 'Feature' as const, properties: {}, geometry: { type: 'LineString' as const, coordinates: pts } }] : []),
+        ],
+      })
+    }
+    if (map.isStyleLoaded()) draw()
+    else map.once('load', draw)
+  }, [measure, config])
 
   useEffect(() => {
     const map = mapRef.current
@@ -289,9 +321,19 @@ export function LocationPicker({ value, onChange, onUsePlot }: LocationPickerPro
     }
   }
 
+  /** The road's width (boundary to boundary) from two clicks across it, onto the site's confirmed details. */
+  function recordRoadWidth([a, b]: LatLng[]) {
+    const d = toLocal(a, b)
+    const metres = Math.round(Math.hypot(d.east, d.north) * 10) / 10
+    const site = live.current.value
+    if (site) live.current.onChange({ ...site, details: { ...(site.details ?? EMPTY_SITE_DETAILS), roadWidthM: metres, roadWidthMeasured: true } })
+    setStep('done')
+  }
+
   function resetBoundary() {
     setCorners([])
     setRoadEdge(null)
+    setMeasure([])
     setStep('pin')
   }
 
@@ -301,13 +343,14 @@ export function LocationPicker({ value, onChange, onUsePlot }: LocationPickerPro
     setStep('corners')
   }
 
-  // Record the boundary on the site once it's complete.
+  // Record the boundary on the site once the road side is known.
   useEffect(() => {
-    if (!value || step !== 'done' || !derived || roadEdge === null) return
+    if (!value || (step !== 'done' && step !== 'measure') || !derived || roadEdge === null) return
     const same =
       value.roadEdge === roadEdge && value.boundary?.length === corners.length && value.boundary.every((c, i) => c.lat === corners[i].lat && c.lng === corners[i].lng)
     if (same) return
-    onChange({ ...value, boundary: corners, roadEdge, rotationDeg: derived.rotationDeg, origin: derived.origin })
+    // A new boundary or road side means a new site report.
+    onChange({ ...value, boundary: corners, roadEdge, rotationDeg: derived.rotationDeg, origin: derived.origin, report: null })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step, roadEdge, corners])
 
@@ -315,6 +358,7 @@ export function LocationPicker({ value, onChange, onUsePlot }: LocationPickerPro
     pin: value ? 'Drag the pin, or click the map, to put it on your plot. Then mark the corners to measure it.' : 'Search for the address, or click the map where the plot is.',
     corners: `Click the plot's corners in order around it (${corners.length} of 4).`,
     road: 'Now click the side of the plot that is on the road.',
+    measure: `Measure the road in front: click its two edges, boundary to boundary, straight across (${measure.length} of 2). Or skip.`,
     done: 'Plot measured. Adjust by marking the corners again.',
   }[step]
 
@@ -384,10 +428,32 @@ export function LocationPicker({ value, onChange, onUsePlot }: LocationPickerPro
               {derived.areaSqft.toLocaleString('en-IN')} sq ft{derived.shape !== 'rectangular' ? `, ${derived.shape}` : ''}.
             </p>
           )}
+          {value.details?.roadWidthMeasured && value.details.roadWidthM && step === 'done' && (
+            <p className="text-sm text-text-muted">
+              Road in front: <span className="font-medium text-text">{value.details.roadWidthM} m ({formatFeet(value.details.roadWidthM / 0.3048)}) wide</span>, measured on the map.
+            </p>
+          )}
           <div className="flex flex-wrap gap-2">
-            {step !== 'corners' && step !== 'road' && (
+            {step !== 'corners' && step !== 'road' && step !== 'measure' && (
               <Button size="sm" variant="outline" onClick={startCorners}>
                 {corners.length ? 'Mark corners again' : 'Mark plot corners'}
+              </Button>
+            )}
+            {step === 'done' && roadEdge !== null && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  setMeasure([])
+                  setStep('measure')
+                }}
+              >
+                {value.details?.roadWidthMeasured ? 'Measure road again' : 'Measure road width'}
+              </Button>
+            )}
+            {step === 'measure' && (
+              <Button size="sm" variant="ghost" onClick={() => setStep('done')}>
+                Skip
               </Button>
             )}
             {(step === 'corners' || step === 'road') && (

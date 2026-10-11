@@ -3,6 +3,8 @@ import { type BoqEstimate, type BoqSection, estimateBoq, formatLakhs } from '@/l
 import { requirementsFor } from '@/lib/byelaws'
 import { CATEGORY_LABELS, type CheckResult, type DesignReport, runDesignCheck } from '@/lib/designCheck'
 import { type PlanRoom, area, areaStatement, formatFeet, requiredSetbacks } from '@/lib/drawings/geometry'
+import { effectiveSbc, foundationAllowance, rainwaterLitresPerYear } from '@/lib/site'
+import { CONSTRAINT_LABELS, type Fact, type FactConfidence } from '@/types/site'
 import type { DrawingSet } from '@/lib/drawings/sheets'
 import { INK, SheetFrame, Stack, notesBlock, tableBlock } from '../SheetFrame'
 import { Label, PlanBase } from '../symbols'
@@ -16,12 +18,12 @@ import { type SheetProps, fmtArea, padBounds, sheetFloor, sheetMeta } from './co
 const label = <T extends string>(options: { value: T; label: string }[], value: T) => options.find((o) => o.value === value)?.label ?? value
 
 function estimateFor(set: DrawingSet): BoqEstimate {
-  return estimateBoq({ plot: set.plot, floors: set.models.map((m) => m.floor), brief: set.brief, budget: set.budget })
+  return estimateBoq({ plot: set.plot, floors: set.models.map((m) => m.floor), brief: set.brief, budget: set.budget, site: set.site })
 }
 
 function reportFor(set: DrawingSet, estimate: BoqEstimate): DesignReport {
   const cost = estimate.budget ? { estimate: estimate.total, budget: estimate.budget.amount, turnkey: estimate.includeInteriors } : null
-  return runDesignCheck({ plot: set.plot, floors: set.models.map((m) => m.floor), brief: set.brief, cost })
+  return runDesignCheck({ plot: set.plot, floors: set.models.map((m) => m.floor), brief: set.brief, cost, site: set.site })
 }
 
 function briefRows(set: DrawingSet): string[][] {
@@ -246,6 +248,115 @@ export function EstimateSheet(props: SheetProps) {
               <Label key={room.id} x={room.x + room.width / 2} y={room.y + room.height / 2 + mm(3.6)} text={formatLakhs(section.subtotal)} mm={mm} size={2.1} weight={700} color={INK.gold} />
             ) : null,
           )}
+        </g>
+      )}
+    </SheetFrame>
+  )
+}
+
+const CONFIDENCE_TEXT: Record<FactConfidence, string> = {
+  measured: 'Measured on map',
+  official: 'Code table',
+  estimated: 'Estimated',
+  indicative: 'Indicative',
+  entered: 'Entered by owner',
+}
+
+/** One printed row: what, the value, how sure, and the source. */
+type SiteRow = [string, string, string, string]
+
+function factRow(label: string, fact: Fact | null | undefined, format?: (f: Fact) => string): SiteRow | null {
+  if (!fact || fact.value === null) return null
+  const value = format ? format(fact) : `${typeof fact.value === 'number' ? fact.value.toLocaleString('en-IN') : String(fact.value)}${fact.unit ? ` ${fact.unit}` : ''}`
+  return [label, value, CONFIDENCE_TEXT[fact.confidence], fact.source]
+}
+
+function siteRows(set: DrawingSet): { location: SiteRow[]; ground: SiteRow[]; nearby: SiteRow[]; notes: string[] } {
+  const site = set.site
+  const report = site?.report
+  const details = site?.details
+  if (!site || !report) return { location: [], ground: [], nearby: [], notes: [] }
+  const road = report.road
+  const widthM = details?.roadWidthM ?? (typeof road?.width.value === 'number' ? road.width.value : null)
+  const location: SiteRow[] = [
+    ['Address', site.formattedAddress ?? `${site.lat.toFixed(5)}, ${site.lng.toFixed(5)}`, 'Map search', site.provider === 'google' ? 'Google Maps Platform' : 'OpenStreetMap'],
+    ['Coordinates', `${site.lat.toFixed(6)}, ${site.lng.toFixed(6)}`, site.boundary ? 'Measured on map' : 'Pin', 'Satellite map'],
+    ...(road ? [[ 'Road in front', `${road.name ?? 'Unnamed'} (${road.kind.replace('_', ' ')}), centre ${road.centreline_distance_m} m from the plot`, 'Estimated', 'OpenStreetMap'] as SiteRow] : []),
+    ...(widthM
+      ? [[
+          'Road width',
+          `${widthM} m (${formatFeet(widthM / 0.3048)})`,
+          details?.roadWidthMeasured ? (details.roadWidthM ? 'Measured' : 'Entered by owner') : 'Estimated',
+          details?.roadWidthMeasured ? 'Measured on the satellite map / owner' : (road?.width.source ?? ''),
+        ] as SiteRow]
+      : []),
+    ...(report.second_road ? [['Second road (corner)', `${report.second_road.name ?? 'Unnamed'} (${report.second_road.kind})`, 'Estimated', 'OpenStreetMap'] as SiteRow] : []),
+    ...(details?.roadLevel ? [['Plot level vs road', { above: 'Above the road', level: 'Level with the road', below: 'Below the road' }[details.roadLevel], 'Entered by owner', 'Owner'] as SiteRow] : []),
+  ]
+  const sbc = effectiveSbc(site)
+  const ground = [
+    factRow('Ground level', report.elevation),
+    factRow('Fall of the land', report.slope),
+    factRow('Rainfall', report.annual_rainfall),
+    factRow('Earthquake zone', report.seismic_zone, (f) => `Zone ${f.value}`),
+    factRow('Basic wind speed', report.wind_speed),
+    factRow('Likely soil', report.soil?.label),
+    ['Safe bearing capacity', `${sbc.value} kN/m²`, sbc.assumed ? 'Assumed' : 'Entered by owner', sbc.assumed ? 'Conservative default until a soil test' : 'Soil test report'] as SiteRow,
+    ...(details?.soilReport && details.groundwaterDepthM !== null ? [['Groundwater', `${details.groundwaterDepthM} m below ground`, 'Entered by owner', 'Soil test report'] as SiteRow] : []),
+    ['Services', [details?.waterSupply === false ? 'no municipal water' : 'municipal water', details?.sewer === false ? 'no sewer (septic tank)' : 'sewer', details?.electricity === false ? 'no power yet' : 'electricity'].join(', '), 'Entered by owner', 'Owner'] as SiteRow,
+  ].filter((r): r is SiteRow => r !== null)
+  const nearby: SiteRow[] = report.constraints.map((c) => [CONSTRAINT_LABELS[c.kind], `${c.name ? `${c.name}, ` : ''}${c.distance_m} m${c.detail ? ` (${c.detail})` : ''}`, 'Estimated', 'OpenStreetMap'])
+
+  const notes: string[] = []
+  const roof = set.models[set.models.length - 1]?.footprint
+  const rainfall = typeof report.annual_rainfall?.value === 'number' ? report.annual_rainfall.value : null
+  if (roof && rainfall) {
+    const litres = rainwaterLitresPerYear(roof.width * roof.height, rainfall)
+    notes.push(`Rainwater: the roof (about ${Math.round(roof.width * roof.height)} sq ft) collects about ${(litres / 1000).toFixed(0)} kL a year; provide a recharge pit or storage as local rules require.`)
+  }
+  if (report.soil?.expansive) notes.push(`Soil: ${report.soil.advice}`)
+  const allowance = foundationAllowance(site)
+  if (allowance) notes.push(`The cost estimate includes +${Math.round(allowance.extra * 100)}% on foundations for ${allowance.reason}.`)
+  notes.push('Values marked Estimated or Indicative come from maps and regional data. Confirm them by site survey and soil investigation (IS 1892) before construction.')
+  return { location, ground, nearby, notes }
+}
+
+export function SiteReportSheet(props: SheetProps) {
+  const { set, sheet } = props
+  const ground = set.models[0]
+  const rows = siteRows(set)
+  const plotRect = { x: 0, y: 0, width: set.plot.width, height: set.plot.height }
+  const columns = [
+    { title: 'ITEM', width: 0.19, value: (r: SiteRow) => r[0] },
+    { title: 'VALUE', width: 0.36, value: (r: SiteRow) => r[1] },
+    { title: 'BASIS', width: 0.13, value: (r: SiteRow) => r[2] },
+    { title: 'SOURCE', width: 0.32, value: (r: SiteRow) => r[3] },
+  ]
+  return (
+    <SheetFrame
+      meta={sheetMeta(set, sheet, { note: 'Site data from maps and open datasets. Confirm by survey and soil investigation before construction.' })}
+      bounds={padBounds(plotRect, 4, plotRect)}
+      northArrow
+      aside={{
+        width: 190,
+        render: (box) => (
+          <Stack
+            box={box}
+            gap={4}
+            blocks={[
+              tableBlock('Location and road', columns, rows.location),
+              tableBlock('Ground, climate and design zones', columns, rows.ground),
+              ...(rows.nearby.length ? [tableBlock('Nearby features', columns, rows.nearby)] : []),
+            ]}
+          />
+        ),
+      }}
+      side={(box) => <Stack box={box} blocks={[notesBlock('Notes', rows.notes)]} />}
+    >
+      {({ mm }) => (
+        <g>
+          <rect {...plotRect} fill="none" stroke={INK.line} strokeWidth={mm(0.5)} strokeDasharray={`${mm(3)} ${mm(0.8)} ${mm(0.6)} ${mm(0.8)}`} />
+          {ground && <PlanBase model={ground} mm={mm} labels="name" />}
         </g>
       )}
     </SheetFrame>

@@ -15,6 +15,7 @@ export function useCostEstimate(includeInteriors?: boolean): BoqEstimate {
   const brief = project?.brief ?? null
   const budgetAmount = project?.budget
   const turnkey = project?.turnkey
+  const site = project?.site ?? null
   return useMemo(
     () =>
       estimateBoq({
@@ -23,7 +24,8 @@ export function useCostEstimate(includeInteriors?: boolean): BoqEstimate {
         brief,
         budget: budgetAmount !== undefined && turnkey !== undefined ? { amount: budgetAmount, turnkey } : null,
         includeInteriors,
+        site,
       }),
-    [plot, floors, brief, budgetAmount, turnkey, includeInteriors],
+    [plot, floors, brief, budgetAmount, turnkey, includeInteriors, site],
   )
 }

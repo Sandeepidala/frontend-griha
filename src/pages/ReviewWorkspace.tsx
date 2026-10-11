@@ -87,10 +87,10 @@ function ReviewDesk({ review, userId, onChange }: { review: Review; userId: stri
 
   const architectName = review.architect?.name ?? 'Griha'
   const set = useMemo(
-    () => buildDrawingSet(plotOf(snapshot), snapshot.floors, snapshot.name, architectName, { brief: snapshot.brief, budget: budgetOf(snapshot) }),
+    () => buildDrawingSet(plotOf(snapshot), snapshot.floors, snapshot.name, architectName, { brief: snapshot.brief, budget: budgetOf(snapshot), site: snapshot.site }),
     [snapshot, architectName],
   )
-  const register = useMemo(() => sheetRegister(snapshot.floors), [snapshot.floors])
+  const register = useMemo(() => sheetRegister(snapshot.floors, { siteReport: Boolean(snapshot.site?.report) }), [snapshot.floors, snapshot.site])
   // Every 2D sheet, the per-floor ones once for each floor.
   const pages = useMemo(() => {
     const out: { key: string; label: string; sheet: SheetDef; floorId: string }[] = []
@@ -113,12 +113,13 @@ function ReviewDesk({ review, userId, onChange }: { review: Review; userId: stri
 
   const checks = useMemo(() => {
     const plot = plotOf(snapshot)
-    const estimate = estimateBoq({ plot, floors: snapshot.floors, brief: snapshot.brief, budget: budgetOf(snapshot) })
+    const estimate = estimateBoq({ plot, floors: snapshot.floors, brief: snapshot.brief, budget: budgetOf(snapshot), site: snapshot.site })
     const report = runDesignCheck({
       plot,
       floors: snapshot.floors,
       brief: snapshot.brief,
       cost: { estimate: estimate.total, budget: snapshot.budget, turnkey: estimate.includeInteriors },
+      site: snapshot.site,
     })
     // Failures first, then warnings.
     const issues = report.results.filter((r) => r.status !== 'pass').sort((a, b) => Number(b.status === 'fail') - Number(a.status === 'fail'))

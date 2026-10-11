@@ -25,7 +25,7 @@ import {
   floorsLabel,
 } from '@/lib/brief'
 import { formatCurrency } from '@/lib/format'
-import type { PlotFromBoundary } from '@/lib/geo/plot'
+import { type PlotFromBoundary, plotFromBoundary } from '@/lib/geo/plot'
 import { useDesignStore } from '@/stores/useDesignStore'
 import { useProjectsStore } from '@/stores/useProjectsStore'
 import { toast } from '@/stores/useToastStore'
@@ -36,15 +36,17 @@ import { FormField } from './FormField'
 
 // The map (MapLibre) loads only when the Location step opens.
 const LocationPicker = lazy(() => import('@/components/site/LocationPicker').then((m) => ({ default: m.LocationPicker })))
+const SiteDetailsStep = lazy(() => import('@/components/site/SiteDetailsStep').then((m) => ({ default: m.SiteDetailsStep })))
 
-const STEPS = ['Location', 'Plot', 'Budget', 'Family & rooms', 'Style', 'Review'] as const
-type StepIndex = 0 | 1 | 2 | 3 | 4 | 5
+const STEPS = ['Location', 'Site details', 'Plot', 'Budget', 'Family & rooms', 'Style', 'Review'] as const
+type StepIndex = 0 | 1 | 2 | 3 | 4 | 5 | 6
 const LOCATION_STEP: StepIndex = 0
-const PLOT_STEP: StepIndex = 1
-const BUDGET_STEP: StepIndex = 2
-const ROOMS_STEP: StepIndex = 3
-const STYLE_STEP: StepIndex = 4
-const REVIEW_STEP: StepIndex = 5
+const SITE_STEP: StepIndex = 1
+const PLOT_STEP: StepIndex = 2
+const BUDGET_STEP: StepIndex = 3
+const ROOMS_STEP: StepIndex = 4
+const STYLE_STEP: StepIndex = 5
+const REVIEW_STEP: StepIndex = 6
 
 interface FormState {
   name: string
@@ -207,8 +209,23 @@ export function ProjectBriefPanel() {
           plot.shape === 'rectangular' ? null : `Sides measured on the map, in order from the road side: ${plot.sidesFt.map((s) => `${s} ft`).join(', ')}.`,
       },
     }))
-    toast.success('Plot size, facing and shape filled in from the map. Check them on the next step.')
-    goTo(PLOT_STEP)
+    toast.success('Plot size, facing and shape filled in from the map. Next: what the map says about the site.')
+    goTo(SITE_STEP)
+  }
+
+  /** Makes another side the road side: facing, rotation and the plan's origin follow. */
+  function applyRoadEdge(edge: number) {
+    const site = form.site
+    if (!site?.boundary) return
+    const plot = plotFromBoundary(site.boundary, edge)
+    setForm((prev) => ({
+      ...prev,
+      plotWidth: String(plot.width),
+      plotHeight: String(plot.height),
+      facing: plot.facing,
+      site: prev.site && { ...prev.site, roadEdge: edge, rotationDeg: plot.rotationDeg, origin: plot.origin, report: null },
+    }))
+    toast.info(`Road side changed: the plot now faces ${plot.facing}.`)
   }
 
   function toggleRoom(room: ExtraRoom) {
@@ -231,7 +248,7 @@ export function ProjectBriefPanel() {
   }
 
   async function handleSubmit() {
-    for (const s of [LOCATION_STEP, PLOT_STEP, BUDGET_STEP, ROOMS_STEP, STYLE_STEP]) {
+    for (const s of [LOCATION_STEP, SITE_STEP, PLOT_STEP, BUDGET_STEP, ROOMS_STEP, STYLE_STEP]) {
       const problem = validateStep(s, form)
       if (problem) {
         setStep(s)
@@ -329,6 +346,19 @@ export function ProjectBriefPanel() {
               <LocationPicker value={form.site} onChange={setSite} onUsePlot={applyPlotFromMap} />
             </Suspense>
           </>
+        )}
+
+        {step === SITE_STEP && (
+          <Suspense fallback={<div className="h-72 animate-pulse rounded-md bg-surface-2" />}>
+            <SiteDetailsStep
+              site={form.site}
+              onChange={setSite}
+              brief={brief}
+              setBrief={setBrief}
+              onUseRoadEdge={applyRoadEdge}
+              onGoToLocation={() => goTo(LOCATION_STEP)}
+            />
+          </Suspense>
         )}
 
         {step === PLOT_STEP && (
@@ -575,6 +605,22 @@ export function ProjectBriefPanel() {
               <ReviewRow label="Address" value={form.site?.formattedAddress || (form.site ? `${form.site.lat.toFixed(5)}, ${form.site.lng.toFixed(5)}` : 'Not set')} />
               {form.site?.boundary && <ReviewRow label="Boundary" value={`Marked on the map (${form.site.boundary.length} corners)`} />}
             </ReviewSection>
+            {form.site?.report && (
+              <ReviewSection title="Site" onEdit={() => goTo(SITE_STEP)}>
+                <ReviewRow label="Road" value={form.site.report.road ? `${form.site.report.road.name ?? 'Unnamed road'}${brief.roadWidthFt ? `, ${brief.roadWidthFt} ft wide` : ''}` : 'Not found on the map'} />
+                <ReviewRow label="Earthquake zone" value={form.site.report.seismic_zone ? `Zone ${form.site.report.seismic_zone.value}` : 'Not available'} />
+                <ReviewRow
+                  label="Soil"
+                  value={
+                    form.site.details?.soilReport && form.site.details.sbcKnM2
+                      ? `Tested: ${form.site.details.sbcKnM2} kN/m²`
+                      : form.site.report.soil
+                        ? `${form.site.report.soil.label.value} (indicative)`
+                        : 'Not available'
+                  }
+                />
+              </ReviewSection>
+            )}
             <ReviewSection title="Plot" onEdit={() => goTo(PLOT_STEP)}>
               <ReviewRow label="Project" value={form.name || '—'} />
               <ReviewRow

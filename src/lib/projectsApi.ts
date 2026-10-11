@@ -13,6 +13,7 @@ import type {
   SiteLocation,
 } from '@/types/project'
 import type { DesignStyle, ExtraRoom, FamilyType, KitchenType, PlotShape, ProjectBrief } from '@/types/brief'
+import type { SiteDetails, SiteReport } from '@/types/site'
 import type { Floor, LengthUnit, Plot } from '@/types/design'
 
 export interface BriefDto {
@@ -96,6 +97,53 @@ export interface SiteDto {
   road_edge: number | null
   rotation_deg: number | null
   origin: LatLng | null
+  report?: SiteReport | null
+  details?: SiteDetailsDto | null
+}
+
+export interface SiteDetailsDto {
+  road_width_m: number | null
+  road_width_measured: boolean
+  road_level: SiteDetails['roadLevel']
+  soil_report: boolean
+  sbc_kn_m2: number | null
+  soil_type: string | null
+  groundwater_depth_m: number | null
+  water_supply: boolean | null
+  sewer: boolean | null
+  electricity: boolean | null
+}
+
+function mapDetails(dto: SiteDetailsDto | null | undefined): SiteDetails | null {
+  if (!dto) return null
+  return {
+    roadWidthM: dto.road_width_m,
+    roadWidthMeasured: dto.road_width_measured,
+    roadLevel: dto.road_level,
+    soilReport: dto.soil_report,
+    sbcKnM2: dto.sbc_kn_m2,
+    soilType: dto.soil_type,
+    groundwaterDepthM: dto.groundwater_depth_m,
+    waterSupply: dto.water_supply,
+    sewer: dto.sewer,
+    electricity: dto.electricity,
+  }
+}
+
+function detailsToDto(details: SiteDetails | null): SiteDetailsDto | null {
+  if (!details) return null
+  return {
+    road_width_m: details.roadWidthM,
+    road_width_measured: details.roadWidthMeasured,
+    road_level: details.roadLevel,
+    soil_report: details.soilReport,
+    sbc_kn_m2: details.sbcKnM2,
+    soil_type: details.soilType,
+    groundwater_depth_m: details.groundwaterDepthM,
+    water_supply: details.waterSupply,
+    sewer: details.sewer,
+    electricity: details.electricity,
+  }
 }
 
 export function mapSite(dto: SiteDto | null | undefined): SiteLocation | null {
@@ -116,6 +164,8 @@ export function mapSite(dto: SiteDto | null | undefined): SiteLocation | null {
     roadEdge: dto.road_edge,
     rotationDeg: dto.rotation_deg,
     origin: dto.origin,
+    report: dto.report ?? null,
+    details: mapDetails(dto.details),
   }
 }
 
@@ -137,6 +187,8 @@ export function siteToDto(site: SiteLocation | null): SiteDto | null {
     road_edge: site.roadEdge,
     rotation_deg: site.rotationDeg,
     origin: site.origin,
+    report: site.report,
+    details: detailsToDto(site.details),
   }
 }
 

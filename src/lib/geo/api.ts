@@ -1,4 +1,6 @@
 import { apiRequest } from '../apiClient'
+import type { LatLng } from '@/types/project'
+import type { SiteReport } from '@/types/site'
 
 /** Location search through the backend's /geo gateway (Google Places, or OpenStreetMap without a key). */
 
@@ -94,4 +96,30 @@ export async function getMapConfig(): Promise<MapConfig> {
   const dto = await apiRequest<MapConfigDto>('/geo/config')
   const source = (s: MapConfigDto['satellite']): TileSource => ({ tiles: s.tiles, attribution: s.attribution, maxZoom: s.max_zoom })
   return { searchProvider: dto.search_provider, satellite: source(dto.satellite), streets: source(dto.streets) }
+}
+
+export interface SiteReportRequest {
+  lat: number
+  lng: number
+  boundary: LatLng[] | null
+  roadEdge: number | null
+  city: string | null
+  state: string | null
+  countryCode: string | null
+}
+
+/** Roads, terrain, rainfall, design zones, soil and nearby constraints for a marked plot (5–25 s). */
+export async function fetchSiteReport(input: SiteReportRequest): Promise<SiteReport> {
+  return apiRequest<SiteReport>('/geo/site-report', {
+    method: 'POST',
+    body: {
+      lat: input.lat,
+      lng: input.lng,
+      boundary: input.boundary,
+      road_edge: input.roadEdge,
+      city: input.city,
+      state: input.state,
+      country_code: input.countryCode,
+    },
+  })
 }

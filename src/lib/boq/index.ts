@@ -1,3 +1,5 @@
+import { foundationAllowance } from '@/lib/site'
+import type { SiteLocation } from '@/types/project'
 import {
   SLAB_THICKNESS,
   frontSide,
@@ -78,6 +80,8 @@ export interface BoqInput {
   budget: { amount: number; turnkey: boolean } | null
   /** Overrides the budget's scope, e.g. to preview turnkey on a construction-only budget. */
   includeInteriors?: boolean
+  /** The site details: poor soil adds an allowance to the foundations. */
+  site?: SiteLocation | null
 }
 
 const CUFT_TO_CUM = 0.0283168
@@ -141,6 +145,13 @@ class Builder {
     return s
   }
 
+  /** A lump sum, already in rupees (location factor included), e.g. a share of a section. */
+  allowance(section: BoqSection, key: RateKey, amount: number, description: string) {
+    const rounded = Math.round(amount)
+    if (!(rounded > 0)) return
+    section.lines.push({ id: `${section.id}:${key}`, rateKey: key, description, quantity: 1, unit: RATES[key].unit, rate: rounded, amount: rounded, interiors: false })
+  }
+
   line(section: BoqSection, key: RateKey, quantity: number, options: { interiors?: boolean; description?: string } = {}) {
     const qty = round2(quantity)
     if (!(qty > 0)) return
@@ -172,7 +183,7 @@ function doorOwner(opening: PlanOpening, rooms: Map<string, PlanRoom>): string |
   return candidates[0]?.id
 }
 
-function buildingSections(b: Builder, models: FloorModel[], floors: Floor[], set: ReturnType<typeof buildDrawingSet>, front: ReturnType<typeof frontSide>) {
+function buildingSections(b: Builder, models: FloorModel[], floors: Floor[], set: ReturnType<typeof buildDrawingSet>, front: ReturnType<typeof frontSide>, site: SiteLocation | null | undefined) {
   const lowest = models[0]
   const columns = set.columns
 
@@ -190,6 +201,11 @@ function buildingSections(b: Builder, models: FloorModel[], floors: Floor[], set
     description: 'RCC M20 plinth beams, incl. steel and formwork',
   })
   b.line(sub, 'plinthFilling', lowest.rooms.reduce((s, r) => s + sqftOf(r), 0))
+  const soil = foundationAllowance(site)
+  if (soil) {
+    const foundations = sub.lines.reduce((s, l) => s + l.amount, 0)
+    b.allowance(sub, 'soilAllowance', foundations * soil.extra, `Allowance for the soil (+${Math.round(soil.extra * 100)}%): ${soil.reason}`)
+  }
 
   const frame = b.section({ id: 'structure', title: 'Structure: columns, beams, slabs, stairs', kind: 'building' })
   let columnCum = 0
@@ -340,7 +356,7 @@ export function estimateBoq(input: BoqInput): BoqEstimate {
   const b = new Builder(location.factor)
 
   if (models.some((m) => m.rooms.length > 0)) {
-    buildingSections(b, models, input.floors, set, frontSide(input.plot))
+    buildingSections(b, models, input.floors, set, frontSide(input.plot), input.site)
     roomSections(b, models, set)
   }
 

@@ -1,5 +1,6 @@
 import { ApiError } from '../apiError'
 import type { GeoPlaceDto, GeoSuggestion } from '../geo/api'
+import type { SiteReport } from '@/types/site'
 
 /**
  * Demo mode's /geo routes: the browser asks OpenStreetMap's public Photon and Nominatim directly,
@@ -73,8 +74,64 @@ async function autocomplete(q: string, country: string | null): Promise<GeoSugge
   return out
 }
 
-export async function handleDemoGeo(segments: string[], params: URLSearchParams): Promise<unknown> {
+/**
+ * Demo mode's site report: ground level, slope and rainfall straight from Open-Meteo. Roads, design
+ * zones and soil come from the backend, so they're listed as unavailable here.
+ */
+async function siteReport(body: Record<string, unknown>): Promise<SiteReport> {
+  const lat = Number(body.lat)
+  const lng = Number(body.lng)
+  const dLat = 60 / 111_195
+  const dLng = 60 / (111_195 * Math.cos((lat * Math.PI) / 180))
+  const probe = [
+    [lat, lng],
+    [lat + dLat, lng],
+    [lat, lng + dLng],
+    [lat - dLat, lng],
+    [lat, lng - dLng],
+  ]
+  const year = new Date().getFullYear() - 1
+  const [heights, rain] = await Promise.all([
+    getJson(
+      `https://api.open-meteo.com/v1/elevation?latitude=${probe.map((p) => p[0].toFixed(6)).join(',')}&longitude=${probe.map((p) => p[1].toFixed(6)).join(',')}`,
+    ).catch(() => null) as Promise<{ elevation?: number[] } | null>,
+    getJson(
+      `https://archive-api.open-meteo.com/v1/archive?latitude=${lat.toFixed(4)}&longitude=${lng.toFixed(4)}&start_date=${year - 9}-01-01&end_date=${year}-12-31&daily=precipitation_sum&timezone=UTC`,
+    ).catch(() => null) as Promise<{ daily?: { precipitation_sum?: (number | null)[] } } | null>,
+  ])
+  const h = heights?.elevation
+  const daily = (rain?.daily?.precipitation_sum ?? []).filter((v): v is number => v !== null)
+  return {
+    generated_at: new Date().toISOString(),
+    road: null,
+    second_road: null,
+    corner_plot: null,
+    suggested_road_edge: null,
+    elevation: h ? { value: Math.round(h[0]), unit: 'm', source: 'Copernicus DEM via Open-Meteo (~90 m grid)', confidence: 'estimated', note: 'Above sea level.' } : null,
+    slope: h
+      ? {
+          value: Math.round((Math.max(Math.abs(h[1] - h[3]), Math.abs(h[2] - h[4])) / 120) * 1000) / 10,
+          unit: '%',
+          source: 'Ground levels 60 m either side (Copernicus DEM)',
+          confidence: 'estimated',
+          note: "General fall of the land around the plot, not the plot itself: confirm the plot's levels on site.",
+        }
+      : null,
+    annual_rainfall:
+      daily.length > 3000
+        ? { value: Math.round(daily.reduce((s, v) => s + v, 0) / 10), unit: 'mm/year', source: 'ERA5 reanalysis via Open-Meteo, 10-year average', confidence: 'estimated', note: null }
+        : null,
+    seismic_zone: null,
+    wind_speed: null,
+    soil: null,
+    constraints: [],
+    unavailable: ['roads, design zones and soil (need the full app, not the demo)', ...(h ? [] : ['ground levels']), ...(daily.length > 3000 ? [] : ['rainfall'])],
+  }
+}
+
+export async function handleDemoGeo(segments: string[], params: URLSearchParams, body: Record<string, unknown> = {}): Promise<unknown> {
   const [, action, id] = segments
+  if (action === 'site-report') return siteReport(body)
   if (action === 'config') {
     return {
       search_provider: 'open',
