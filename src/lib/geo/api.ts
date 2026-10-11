@@ -44,16 +44,30 @@ export interface TileSource {
   maxZoom: number
 }
 
+export interface TerrainSource extends TileSource {
+  encoding: 'terrarium' | 'mapbox'
+}
+
 export interface MapConfig {
   searchProvider: 'google' | 'open'
   satellite: TileSource
   streets: TileSource
+  terrain: TerrainSource
 }
 
 interface MapConfigDto {
   search_provider: MapConfig['searchProvider']
   satellite: { tiles: string[]; attribution: string; max_zoom: number }
   streets: { tiles: string[]; attribution: string; max_zoom: number }
+  /** Missing from backends deployed before the 3D site view. */
+  terrain?: { tiles: string[]; attribution: string; max_zoom: number; encoding: TerrainSource['encoding'] }
+}
+
+const DEFAULT_TERRAIN: TerrainSource = {
+  tiles: ['https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png'],
+  attribution: 'Terrain: AWS Terrain Tiles (SRTM, GMTED and others)',
+  maxZoom: 15,
+  encoding: 'terrarium',
 }
 
 export function mapPlace(dto: GeoPlaceDto): GeoPlace {
@@ -95,7 +109,12 @@ export async function reverseGeocode(lat: number, lng: number): Promise<GeoPlace
 export async function getMapConfig(): Promise<MapConfig> {
   const dto = await apiRequest<MapConfigDto>('/geo/config')
   const source = (s: MapConfigDto['satellite']): TileSource => ({ tiles: s.tiles, attribution: s.attribution, maxZoom: s.max_zoom })
-  return { searchProvider: dto.search_provider, satellite: source(dto.satellite), streets: source(dto.streets) }
+  return {
+    searchProvider: dto.search_provider,
+    satellite: source(dto.satellite),
+    streets: source(dto.streets),
+    terrain: dto.terrain ? { ...source(dto.terrain), encoding: dto.terrain.encoding } : DEFAULT_TERRAIN,
+  }
 }
 
 export interface SiteReportRequest {
@@ -122,4 +141,16 @@ export async function fetchSiteReport(input: SiteReportRequest): Promise<SiteRep
       country_code: input.countryCode,
     },
   })
+}
+
+export interface NeighbourBuilding {
+  type: 'Feature'
+  id: number
+  properties: { height_m: number; basis: 'mapped' | 'levels' | 'estimated'; name: string | null }
+  geometry: { type: 'Polygon'; coordinates: [number, number][][] }
+}
+
+/** Buildings around the plot from OpenStreetMap, each with a height in metres (mapped or estimated). */
+export async function fetchBuildings(lat: number, lng: number, radius = 150): Promise<{ type: 'FeatureCollection'; features: NeighbourBuilding[] }> {
+  return apiRequest(`/geo/buildings?${query({ lat: lat.toFixed(5), lng: lng.toFixed(5), radius })}`)
 }

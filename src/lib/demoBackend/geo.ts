@@ -129,6 +129,34 @@ async function siteReport(body: Record<string, unknown>): Promise<SiteReport> {
   }
 }
 
+/** Demo mode's neighbouring buildings: OpenStreetMap's Overpass, asked straight from the browser. */
+async function buildings(lat: number, lng: number, radius: number) {
+  const query = `[out:json][timeout:15];way(around:${Math.min(300, Math.max(20, radius))},${lat},${lng})[building];out tags geom;`
+  let data: { elements?: { id: number; tags?: Record<string, string>; geometry?: { lat: number; lon: number }[] }[] }
+  try {
+    const response = await fetch('https://overpass-api.de/api/interpreter', { method: 'POST', body: new URLSearchParams({ data: query }) })
+    if (!response.ok) throw new Error(String(response.status))
+    data = await response.json()
+  } catch {
+    throw new ApiError(502, 'Neighbouring buildings are unavailable right now. Try again.')
+  }
+  const number = (v?: string) => (v ? Number.parseFloat(v) : Number.NaN)
+  return {
+    type: 'FeatureCollection',
+    features: (data.elements ?? [])
+      .filter((w) => (w.geometry?.length ?? 0) >= 4)
+      .map((w) => {
+        const tags = w.tags ?? {}
+        const mapped = number(tags.height)
+        const levels = number(tags['building:levels'])
+        const [height, basis] = mapped > 0 ? [mapped, 'mapped'] : levels > 0 ? [levels * 3.2 + 0.6, 'levels'] : [7, 'estimated']
+        const ring = w.geometry!.map((p) => [p.lon, p.lat])
+        if (ring[0][0] !== ring[ring.length - 1][0] || ring[0][1] !== ring[ring.length - 1][1]) ring.push(ring[0])
+        return { type: 'Feature', id: w.id, properties: { height_m: Math.round(height * 10) / 10, basis, name: tags.name ?? null }, geometry: { type: 'Polygon', coordinates: [ring] } }
+      }),
+  }
+}
+
 export async function handleDemoGeo(segments: string[], params: URLSearchParams, body: Record<string, unknown> = {}): Promise<unknown> {
   const [, action, id] = segments
   if (action === 'site-report') return siteReport(body)
@@ -141,8 +169,15 @@ export async function handleDemoGeo(segments: string[], params: URLSearchParams,
         max_zoom: 19,
       },
       streets: { tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'], attribution: '© OpenStreetMap contributors', max_zoom: 19 },
+      terrain: {
+        tiles: ['https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png'],
+        attribution: 'Terrain: AWS Terrain Tiles (SRTM, GMTED and others)',
+        max_zoom: 15,
+        encoding: 'terrarium',
+      },
     }
   }
+  if (action === 'buildings') return buildings(Number(params.get('lat')), Number(params.get('lng')), Number(params.get('radius') ?? 150))
   if (action === 'autocomplete') return autocomplete(params.get('q') ?? '', params.get('country'))
   if (action === 'places' && id) {
     const osmId = decodeURIComponent(id).replace(/^osm:/, '')

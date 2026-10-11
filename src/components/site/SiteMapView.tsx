@@ -1,6 +1,6 @@
 import { MapPinned } from 'lucide-react'
 import { GeoJSONSource, LngLatBounds, Map as MapLibre, Marker, NavigationControl, ScaleControl, type StyleSpecification } from '@/lib/geo/maplibre'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react'
 import { Button } from '@/components/ui/Button'
 import { SegmentedControl } from '@/components/ui/SegmentedControl'
 import { EmptyState } from '@/components/widgets/EmptyState'
@@ -13,6 +13,8 @@ import { useActiveProject, useProjectsStore } from '@/stores/useProjectsStore'
 import type { SiteLocation } from '@/types/project'
 
 type Basemap = 'satellite' | 'streets'
+
+const Site3DView = lazy(() => import('./Site3DView').then((m) => ({ default: m.Site3DView })))
 const EMPTY = { type: 'FeatureCollection' as const, features: [] }
 
 type Placed = SiteLocation & { origin: NonNullable<SiteLocation['origin']> }
@@ -94,6 +96,7 @@ export function SiteMapView() {
   const [config, setConfig] = useState<MapConfig | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [basemap, setBasemap] = useState<Basemap>('satellite')
+  const [mode, setMode] = useState<'plan' | '3d'>('plan')
   const models = useMemo(() => buildBuildingModel(floors, plot), [floors, plot])
   const placed = site?.origin ? (site as Placed) : null
 
@@ -109,7 +112,7 @@ export function SiteMapView() {
   }, [site])
 
   useEffect(() => {
-    if (!config || !site || !containerRef.current) return
+    if (!config || !site || mode !== 'plan' || !containerRef.current) return
     const map = new MapLibre({ container: containerRef.current, style: style(config), center: [site.lng, site.lat], zoom: config.satellite.maxZoom, maxZoom: config.satellite.maxZoom + 3 })
     map.addControl(new NavigationControl({ showCompass: true }), 'top-right')
     map.addControl(new ScaleControl({ unit: 'metric' }), 'bottom-left')
@@ -119,7 +122,7 @@ export function SiteMapView() {
       map.remove()
       mapRef.current = null
     }
-  }, [config, site])
+  }, [config, site, mode])
 
   useEffect(() => {
     const map = mapRef.current
@@ -135,7 +138,7 @@ export function SiteMapView() {
     }
     if (map.isStyleLoaded()) draw()
     else map.once('load', draw)
-  }, [site, placed, models, config])
+  }, [site, placed, models, config, mode])
 
   useEffect(() => {
     const map = mapRef.current
@@ -146,7 +149,7 @@ export function SiteMapView() {
     }
     if (map.isStyleLoaded()) apply()
     else map.once('load', apply)
-  }, [basemap])
+  }, [basemap, mode])
 
   if (!project) return null
   if (!site) {
@@ -163,6 +166,36 @@ export function SiteMapView() {
     )
   }
 
+  const modeToggle = (
+    <div className="rounded-md bg-surface/90 shadow-sm">
+      <SegmentedControl<'plan' | '3d'>
+        value={mode}
+        onChange={setMode}
+        options={[
+          { value: 'plan', label: 'Plan' },
+          { value: '3d', label: '3D' },
+        ]}
+      />
+    </div>
+  )
+
+  if (mode === '3d') {
+    return (
+      <div className="relative h-full">
+        {placed && config ? (
+          <Suspense fallback={<div className="flex h-full items-center justify-center text-sm text-text-muted">Loading 3D view…</div>}>
+            <Site3DView site={placed} models={models} config={config} />
+          </Suspense>
+        ) : (
+          <p className="flex h-full items-center justify-center p-6 text-center text-sm text-text-muted">
+            Mark the plot's corners in the brief's Location step to see the house in 3D on its site.
+          </p>
+        )}
+        <div className="absolute top-3 left-3">{modeToggle}</div>
+      </div>
+    )
+  }
+
   return (
     <div className="relative h-full">
       {error ? (
@@ -171,6 +204,8 @@ export function SiteMapView() {
         <div ref={containerRef} className="h-full w-full" data-testid="site-view-map" />
       )}
       <div className="absolute top-3 left-3 flex flex-col gap-2">
+        <div className="flex gap-2">
+        {modeToggle}
         <div className="rounded-md bg-surface/90 shadow-sm">
           <SegmentedControl<Basemap>
             value={basemap}
@@ -180,6 +215,7 @@ export function SiteMapView() {
               { value: 'streets', label: 'Map' },
             ]}
           />
+        </div>
         </div>
         <div className="max-w-xs rounded-md bg-surface/95 px-3 py-2 text-xs text-text-muted shadow-sm">
           <p className="font-medium text-text">{site.formattedAddress || `${site.lat.toFixed(5)}, ${site.lng.toFixed(5)}`}</p>
