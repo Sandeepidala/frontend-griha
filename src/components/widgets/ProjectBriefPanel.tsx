@@ -173,6 +173,8 @@ export function ProjectBriefPanel() {
   const [form, setForm] = useState<FormState>(NEW_PROJECT_FORM)
   const [step, setStep] = useState<StepIndex>(0)
   const [error, setError] = useState<string | null>(null)
+  // The location picker's plot marking, while unfinished: leaving the step then would drop the corners.
+  const [markingPlot, setMarkingPlot] = useState<'corners' | 'road' | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   // Reset the wizard whenever it opens for a different purpose (new project, or another project's brief).
   // An edit waits until that project is in the list, rather than briefly showing a blank new-project form.
@@ -242,6 +244,13 @@ export function ProjectBriefPanel() {
   }
 
   function next() {
+    if (step === LOCATION_STEP && markingPlot) {
+      return setError(
+        markingPlot === 'corners'
+          ? "Finish marking the plot: click all 4 of its corners on the map, or press Cancel under the map."
+          : 'Finish marking the plot: click the side of the plot that faces the road, or press Cancel under the map.',
+      )
+    }
     const problem = validateStep(step, form)
     if (problem) return setError(problem)
     goTo((step + 1) as StepIndex)
@@ -344,7 +353,13 @@ export function ProjectBriefPanel() {
             </p>
             <Suspense fallback={<div className="h-72 animate-pulse rounded-md bg-surface-2" />}>
               {/* A fresh picker each time the brief opens, so its map starts on this project's pin. */}
-              <LocationPicker key={loadedKey ?? 'closed'} value={form.site} onChange={setSite} onUsePlot={applyPlotFromMap} />
+              <LocationPicker
+                key={loadedKey ?? 'closed'}
+                value={form.site}
+                onChange={setSite}
+                onUsePlot={applyPlotFromMap}
+                onMarkingChange={setMarkingPlot}
+              />
             </Suspense>
           </>
         )}

@@ -48,7 +48,8 @@ export function SidePanel({
   useEffect(() => {
     if (!open) return
     function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === 'Escape') onClose()
+      // Escape closes a dialog (an alert, a confirmation) in front of the panel first, not the panel too.
+      if (event.key === 'Escape' && !document.querySelector('dialog[open]')) onClose()
     }
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)

@@ -16,6 +16,8 @@ interface LocationPickerProps {
   onChange: (site: SiteLocation | null) => void
   /** Applies what the drawn boundary says about the plot (size, facing, shape) to the brief. */
   onUsePlot: (plot: PlotFromBoundary) => void
+  /** Told while the plot is half-marked (corners still being clicked, or the road side not picked yet), so the brief can hold it there. */
+  onMarkingChange?: (marking: 'corners' | 'road' | null) => void
 }
 
 type Step = 'pin' | 'corners' | 'road' | 'measure' | 'done'
@@ -82,11 +84,30 @@ function message(err: unknown) {
   return err instanceof ApiError ? err.message : 'Location search is unavailable right now.'
 }
 
+/** The index of the plot side (corner i to i + 1) nearest a point on the map, in screen pixels. */
+function nearestSide(map: MapLibre, corners: LatLng[], at: { x: number; y: number }): number {
+  const pts = corners.map((c) => map.project([c.lng, c.lat]))
+  let best = 0
+  let bestDistance = Infinity
+  pts.forEach((a, i) => {
+    const b = pts[(i + 1) % pts.length]
+    const dx = b.x - a.x
+    const dy = b.y - a.y
+    const t = Math.max(0, Math.min(1, ((at.x - a.x) * dx + (at.y - a.y) * dy) / (dx * dx + dy * dy || 1)))
+    const distance = Math.hypot(at.x - (a.x + t * dx), at.y - (a.y + t * dy))
+    if (distance < bestDistance) {
+      bestDistance = distance
+      best = i
+    }
+  })
+  return best
+}
+
 /**
  * Finds the plot on a satellite map: search an address, drop the pin on the plot, click its corners
  * and pick the side on the road. The plot's size, facing and shape are then read off the map.
  */
-export function LocationPicker({ value, onChange, onUsePlot }: LocationPickerProps) {
+export function LocationPicker({ value, onChange, onUsePlot, onMarkingChange }: LocationPickerProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<MapLibre | null>(null)
   const markerRef = useRef<Marker | null>(null)
@@ -111,6 +132,12 @@ export function LocationPicker({ value, onChange, onUsePlot }: LocationPickerPro
   live.current = { step, corners, value, onChange, measure }
 
   const derived = corners.length >= 3 && roadEdge !== null ? plotFromBoundary(corners, roadEdge) : null
+
+  useEffect(() => {
+    onMarkingChange?.(step === 'corners' || step === 'road' ? step : null)
+  }, [step, onMarkingChange])
+  // Not half-marked once the picker is gone.
+  useEffect(() => () => onMarkingChange?.(null), [onMarkingChange])
 
   useEffect(() => {
     let cancelled = false
@@ -148,12 +175,11 @@ export function LocationPicker({ value, onChange, onUsePlot }: LocationPickerPro
         return
       }
       if (current === 'road') {
-        const hit = map.queryRenderedFeatures(event.point, { layers: ['edges'] })[0]
-        if (hit) {
-          setRoadEdge(Number(hit.properties?.index))
-          setMeasure([])
-          setStep('measure')
-        }
+        // The side nearest the click: the sides are thin lines, and a near miss shouldn't do nothing.
+        setRoadEdge(nearestSide(map, points, event.point))
+        setHoverEdge(null)
+        setMeasure([])
+        setStep('measure')
         return
       }
       if (current === 'measure') {
@@ -164,12 +190,13 @@ export function LocationPicker({ value, onChange, onUsePlot }: LocationPickerPro
       }
       if (current === 'pin') void placePin(point)
     })
-    map.on('mousemove', 'edges', (event) => {
-      if (live.current.step !== 'road') return
+    map.on('mousemove', (event) => {
+      const { step: current, corners: points } = live.current
+      if (current !== 'road') return
       map.getCanvas().style.cursor = 'pointer'
-      setHoverEdge(Number(event.features?.[0]?.properties?.index))
+      setHoverEdge(nearestSide(map, points, event.point))
     })
-    map.on('mouseleave', 'edges', () => {
+    map.on('mouseout', () => {
       map.getCanvas().style.cursor = ''
       setHoverEdge(null)
     })
@@ -357,7 +384,7 @@ export function LocationPicker({ value, onChange, onUsePlot }: LocationPickerPro
   const hint = {
     pin: value ? 'Drag the pin, or click the map, to put it on your plot. Then mark the corners to measure it.' : 'Search for the address, or click the map where the plot is.',
     corners: `Click the plot's corners in order around it (${corners.length} of 4).`,
-    road: 'Now click the side of the plot that is on the road.',
+    road: 'Now click the side of the plot that faces the road (it lights up as you point at it).',
     measure: `Measure the road in front: click its two edges, boundary to boundary, straight across (${measure.length} of 2). Or skip.`,
     done: 'Plot measured. Adjust by marking the corners again.',
   }[step]
