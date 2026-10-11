@@ -28,7 +28,9 @@ import {
  * on, and keeps its data in localStorage so edits survive a reload.
  */
 
-const STORAGE_KEY = 'griha-demo-db-v1'
+// v2: the demo account became grihatest@griha.demo; browsers holding v1 start again from the seed.
+const STORAGE_KEY = 'griha-demo-db-v2'
+const OLD_STORAGE_KEYS = ['griha-demo-db-v1']
 const TOKEN_PREFIX = 'demo.'
 const MIN_PASSWORD_LENGTH = 8
 
@@ -37,6 +39,7 @@ let db: DemoDb | null = null
 function database(): DemoDb {
   if (db) return db
   try {
+    for (const key of OLD_STORAGE_KEYS) localStorage.removeItem(key)
     const stored = localStorage.getItem(STORAGE_KEY)
     if (stored) db = upgradeStoredReviews(upgradeStoredProjects(JSON.parse(stored) as DemoDb))
   } catch {

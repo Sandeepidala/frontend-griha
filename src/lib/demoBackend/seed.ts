@@ -282,7 +282,7 @@ export function createSeedDb(): DemoDb {
   const db: DemoDb = { users: [], projects: [], floors: [], rooms: [], activity: [], reviews: [], review_comments: [] }
   const demoUser: DemoUser = {
     id: createId(),
-    name: 'Sandeep Gowda',
+    name: 'Griha Test',
     email: DEMO_EMAIL,
     phone: null,
     avatar_url: null,

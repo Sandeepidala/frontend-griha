@@ -44,7 +44,7 @@ describe('demo architect reviews', () => {
 
     const queue = await call<ReviewSummaryDto[]>(architect, 'GET', '/reviews')
     expect(queue.map((r) => r.id)).toEqual([requested.id])
-    expect(queue[0].requester.name).toBe('Sandeep Gowda')
+    expect(queue[0].requester.name).toBe('Griha Test')
 
     await call(architect, 'POST', `/reviews/${requested.id}/claim`)
     const roomId = requested.snapshot.rooms[0].id
