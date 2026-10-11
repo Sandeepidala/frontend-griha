@@ -159,7 +159,7 @@ export function SiteMapView() {
           icon={MapPinned}
           title="Put the plan on the map"
           description="Find the plot on a satellite map and mark its corners. You'll see the house to scale on the real site, with the road and neighbours."
-          action={<Button onClick={() => openBriefEditor(project.id)}>Add the location</Button>}
+          action={<Button onClick={() => openBriefEditor(project.id, 'location')}>Add the location</Button>}
           className="max-w-lg border-none"
         />
       </div>
@@ -182,14 +182,22 @@ export function SiteMapView() {
   if (mode === '3d') {
     return (
       <div className="relative h-full">
-        {placed && config ? (
+        {!placed ? (
+          <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center">
+            <p className="max-w-md text-sm text-text-muted">
+              Mark the plot's corners on the map to see the house in 3D on its site, with the neighbouring buildings and their
+              shadows.
+            </p>
+            <Button leftIcon={<MapPinned className="size-4" />} onClick={() => openBriefEditor(project.id, 'location')}>
+              Mark plot corners
+            </Button>
+          </div>
+        ) : config ? (
           <Suspense fallback={<div className="flex h-full items-center justify-center text-sm text-text-muted">Loading 3D view…</div>}>
             <Site3DView site={placed} models={models} config={config} />
           </Suspense>
         ) : (
-          <p className="flex h-full items-center justify-center p-6 text-center text-sm text-text-muted">
-            Mark the plot's corners in the brief's Location step to see the house in 3D on its site.
-          </p>
+          <p className="flex h-full items-center justify-center p-6 text-sm text-text-muted">{error ?? 'Loading 3D view…'}</p>
         )}
         <div className="absolute top-3 left-3">{modeToggle}</div>
       </div>
@@ -223,9 +231,9 @@ export function SiteMapView() {
             <p className="mt-1">Ground floor to scale; upper floors dashed in red. Yellow dashes: the boundary marked on the map.</p>
           ) : (
             <p className="mt-1">
-              Mark the plot's corners in the brief to place the plan here.{' '}
-              <button type="button" className="font-medium text-primary" onClick={() => openBriefEditor(project.id)}>
-                Edit location
+              Mark the plot's corners to place the plan here.{' '}
+              <button type="button" className="font-medium text-primary" onClick={() => openBriefEditor(project.id, 'location')}>
+                Mark plot corners
               </button>
             </p>
           )}

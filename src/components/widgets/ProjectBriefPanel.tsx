@@ -181,7 +181,7 @@ export function ProjectBriefPanel() {
   if (panelKey !== loadedKey) {
     setLoadedKey(panelKey)
     setForm(editing ? formFromProject(editing) : NEW_PROJECT_FORM)
-    setStep(editing ? REVIEW_STEP : 0)
+    setStep(!editing ? 0 : panel?.mode === 'edit' && panel.startAt === 'location' ? LOCATION_STEP : REVIEW_STEP)
     setError(null)
   }
 
@@ -343,7 +343,8 @@ export function ProjectBriefPanel() {
               enter the plot by hand.
             </p>
             <Suspense fallback={<div className="h-72 animate-pulse rounded-md bg-surface-2" />}>
-              <LocationPicker value={form.site} onChange={setSite} onUsePlot={applyPlotFromMap} />
+              {/* A fresh picker each time the brief opens, so its map starts on this project's pin. */}
+              <LocationPicker key={loadedKey ?? 'closed'} value={form.site} onChange={setSite} onUsePlot={applyPlotFromMap} />
             </Suspense>
           </>
         )}
