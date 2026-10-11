@@ -6,7 +6,7 @@ React + TypeScript + Vite app for designing homes: projects dashboard, 2D/3D mul
 
 The app talks to the FastAPI backend at `VITE_API_BASE_URL`. **When that variable is unset, it runs in demo mode**: an
 in-browser backend (`src/lib/demoBackend`) answers the same API routes and keeps its data in the browser's localStorage.
-Demo mode starts with the demo account `sandeep.gowda@movingwalls.com` / `griha1234` and three example projects, and every
+Demo mode starts with the demo account `grihatest@griha.demo` / `griha1234` and three example projects, and every
 new account (email, Google/Facebook/Apple, SSO or phone) gets its own copy of them. Data is per browser.
 
 ```bash
