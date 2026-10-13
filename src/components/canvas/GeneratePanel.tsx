@@ -1,70 +1,29 @@
 import { useEffect, useState } from 'react'
-import { AlertTriangle, RefreshCw, XCircle } from 'lucide-react'
-import { PlanThumbnail } from '@/components/canvas/PlanThumbnail'
-import { Badge } from '@/components/ui/Badge'
+import { AlertTriangle, RefreshCw } from 'lucide-react'
+import { LayoutOptionCard } from '@/components/canvas/LayoutOptionCard'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { SidePanel } from '@/components/ui/SidePanel'
 import { Spinner } from '@/components/ui/Spinner'
 import { formatLakhs } from '@/lib/boq'
 import { compliantSetbacks, requirementsFor } from '@/lib/byelaws'
-import { scoreVariant } from '@/lib/designCheck'
 import { generateOptions, type GenerateResult, type GeneratedOption } from '@/lib/generator'
 import { useDesignStore } from '@/stores/useDesignStore'
 import { useProjectsStore } from '@/stores/useProjectsStore'
 import { toast } from '@/stores/useToastStore'
 
-const BUDGET_VARIANT = { within: 'success', close: 'warning', over: 'danger' } as const
-
 function OptionCard({ option, onUse, busy }: { option: GeneratedOption; onUse: () => void; busy: boolean }) {
   const plot = useDesignStore((state) => state.plot)
-  const issues = option.report.results.filter((r) => r.status !== 'pass').slice(0, 3)
-  const bedrooms = option.floors.flatMap((f) => f.rooms).filter((r) => r.type === 'bedroom').length
-  const bathrooms = option.floors.flatMap((f) => f.rooms).filter((r) => r.type === 'wet').length
-
   return (
-    <article className="flex flex-col gap-3 rounded-md border border-border p-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3 className="font-display text-base font-semibold text-text">{option.label}</h3>
-        <div className="flex items-center gap-1.5">
-          <Badge variant={scoreVariant(option.report.score)} className="font-mono tabular-nums">
-            Score {option.report.score}
-          </Badge>
-          <Badge variant={option.estimate.budget ? BUDGET_VARIANT[option.estimate.budget.status] : 'neutral'} className="font-mono tabular-nums">
-            {formatLakhs(option.estimate.total)}
-          </Badge>
-        </div>
-      </div>
-      <p className="text-xs text-text-muted">
-        {option.estimate.builtUpArea.toLocaleString('en-IN')} sq ft · {bedrooms} bedrooms · {bathrooms} bathrooms
-        {option.summary && <> · {option.summary}</>}
-      </p>
-      <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${option.floors.length}, minmax(0, 1fr))` }}>
-        {option.floors.map((floor) => (
-          <figure key={floor.id} className="flex flex-col gap-1">
-            <PlanThumbnail plot={plot} floor={floor} className="aspect-square w-full rounded-sm bg-surface-2" />
-            <figcaption className="text-center text-[11px] text-text-muted">{floor.name}</figcaption>
-          </figure>
-        ))}
-      </div>
-      {issues.length > 0 && (
-        <ul className="flex flex-col gap-1">
-          {issues.map((issue) => (
-            <li key={issue.id} className="flex items-start gap-1.5 text-xs text-text-muted">
-              {issue.status === 'fail' ? (
-                <XCircle className="mt-px size-3.5 shrink-0 text-danger" />
-              ) : (
-                <AlertTriangle className="mt-px size-3.5 shrink-0 text-warning" />
-              )}
-              {issue.title}
-            </li>
-          ))}
-        </ul>
-      )}
-      <Button onClick={onUse} isLoading={busy} className="mt-auto">
-        Use this layout
-      </Button>
-    </article>
+    <LayoutOptionCard
+      option={option}
+      plot={plot}
+      footer={
+        <Button onClick={onUse} isLoading={busy} className="w-full">
+          Use this layout
+        </Button>
+      }
+    />
   )
 }
 

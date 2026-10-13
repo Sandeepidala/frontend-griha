@@ -21,7 +21,7 @@ export const STEP_INTROS: Record<StepIndex, string> = {
   3: 'What you plan to spend, and what it should cover. The estimate is for a concept plan that fits your brief.',
   4: 'Who will live here and the rooms you need. The concept plan updates as you go.',
   5: 'The look you want, Vastu, and anything else the design team should know.',
-  6: 'Check everything before creating the project. You can change any of it later from Edit brief.',
+  6: 'Check the brief and choose the layout your project starts with. You can change any of it later.',
 }
 
 export interface FormState {
