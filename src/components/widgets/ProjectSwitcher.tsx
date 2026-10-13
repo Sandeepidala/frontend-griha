@@ -10,7 +10,6 @@ export function ProjectSwitcher() {
   const projects = useProjectsStore((state) => state.projects)
   const activeProjectId = useProjectsStore((state) => state.activeProjectId)
   const setActiveProject = useProjectsStore((state) => state.setActiveProject)
-  const openNewProjectPanel = useProjectsStore((state) => state.openNewProjectPanel)
   const openBriefEditor = useProjectsStore((state) => state.openBriefEditor)
   const navigate = useNavigate()
 
@@ -78,7 +77,7 @@ export function ProjectSwitcher() {
           <button
             type="button"
             onClick={() => {
-              openNewProjectPanel()
+              navigate('/projects/new')
               close()
             }}
             className="flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-left text-sm font-medium text-primary transition-colors hover:bg-surface-2"

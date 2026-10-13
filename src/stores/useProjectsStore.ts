@@ -5,7 +5,7 @@ import type { ActivityLogEntry, NewProjectInput, ProjectBriefUpdate, ProjectSumm
 
 /** The brief wizard either starts a new project or edits an existing project's brief. */
 /** An edit opens on the Review step, or straight on `startAt` (e.g. to mark the plot on the map). */
-export type BriefPanelState = { mode: 'create' } | { mode: 'edit'; projectId: string; startAt?: 'location' } | null
+export type BriefPanelState = { mode: 'edit'; projectId: string; startAt?: 'location' } | null
 
 interface ProjectsState {
   projects: ProjectSummary[]
@@ -19,7 +19,6 @@ interface ProjectsState {
   createProject: (input: NewProjectInput) => Promise<ProjectSummary>
   updateProjectBrief: (projectId: string, input: ProjectBriefUpdate) => Promise<ProjectSummary>
   setActiveProject: (id: string) => void
-  openNewProjectPanel: () => void
   openBriefEditor: (projectId: string, startAt?: 'location') => void
   closeBriefPanel: () => void
   reset: () => void
@@ -67,7 +66,6 @@ export const useProjectsStore = create<ProjectsState>((set, get) => ({
   },
 
   setActiveProject: (id) => set({ activeProjectId: id }),
-  openNewProjectPanel: () => set({ briefPanel: { mode: 'create' } }),
   openBriefEditor: (projectId, startAt) => set({ briefPanel: { mode: 'edit', projectId, startAt } }),
   closeBriefPanel: () => set({ briefPanel: null }),
 

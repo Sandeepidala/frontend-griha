@@ -1,7 +1,9 @@
 import { Check, Loader2, MapPin, RotateCcw, Search, X } from 'lucide-react'
 import { GeoJSONSource, Map as MapLibre, Marker, NavigationControl, type MapMouseEvent, type StyleSpecification } from '@/lib/geo/maplibre'
 import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Button } from '@/components/ui/Button'
+import { cn } from '@/lib/cn'
 import { Input } from '@/components/ui/Input'
 import { SegmentedControl } from '@/components/ui/SegmentedControl'
 import { ApiError } from '@/lib/apiError'
@@ -18,6 +20,8 @@ interface LocationPickerProps {
   onUsePlot: (plot: PlotFromBoundary) => void
   /** Told while the plot is half-marked (corners still being clicked, or the road side not picked yet), so the brief can hold it there. */
   onMarkingChange?: (marking: 'corners' | 'road' | null) => void
+  /** Puts the map in this element (e.g. a page's large right-hand pane) instead of under the search box. */
+  mapTarget?: HTMLElement | null
 }
 
 type Step = 'pin' | 'corners' | 'road' | 'measure' | 'done'
@@ -107,7 +111,7 @@ function nearestSide(map: MapLibre, corners: LatLng[], at: { x: number; y: numbe
  * Finds the plot on a satellite map: search an address, drop the pin on the plot, click its corners
  * and pick the side on the road. The plot's size, facing and shape are then read off the map.
  */
-export function LocationPicker({ value, onChange, onUsePlot, onMarkingChange }: LocationPickerProps) {
+export function LocationPicker({ value, onChange, onUsePlot, onMarkingChange, mapTarget }: LocationPickerProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<MapLibre | null>(null)
   const markerRef = useRef<Marker | null>(null)
@@ -389,6 +393,32 @@ export function LocationPicker({ value, onChange, onUsePlot, onMarkingChange }: 
     done: 'Plot measured. Adjust by marking the corners again.',
   }[step]
 
+  const mapBlock = (
+    <div className={cn('relative overflow-hidden bg-surface-2', mapTarget ? 'h-full w-full' : 'h-72 rounded-md border border-border')}>
+      {mapError ? (
+        <p className="flex h-full items-center justify-center p-4 text-center text-sm text-text-muted">{mapError}</p>
+      ) : (
+        <div ref={containerRef} className="h-full w-full" data-testid="site-map" />
+      )}
+      <div className="absolute top-2 left-2 rounded-md bg-surface/90 shadow-sm">
+        <SegmentedControl<Basemap>
+          value={basemap}
+          onChange={setBasemap}
+          options={[
+            { value: 'satellite', label: 'Satellite' },
+            { value: 'streets', label: 'Map' },
+          ]}
+        />
+      </div>
+      {mapTarget && (
+        // On the large map, the next thing to do sits on the map itself, where the clicking happens.
+        <p className="pointer-events-none absolute bottom-8 left-1/2 max-w-[90%] -translate-x-1/2 rounded-md bg-surface/95 px-3 py-2 text-center text-sm font-medium text-text shadow-md">
+          {hint}
+        </p>
+      )}
+    </div>
+  )
+
   return (
     <div className="flex flex-col gap-3">
       <div className="relative">
@@ -423,24 +453,9 @@ export function LocationPicker({ value, onChange, onUsePlot, onMarkingChange }: 
       </div>
       {searchError && <p className="text-xs text-warning">{searchError}</p>}
 
-      <div className="relative h-72 overflow-hidden rounded-md border border-border bg-surface-2">
-        {mapError ? (
-          <p className="flex h-full items-center justify-center p-4 text-center text-sm text-text-muted">{mapError}</p>
-        ) : (
-          <div ref={containerRef} className="h-full w-full" data-testid="site-map" />
-        )}
-        <div className="absolute top-2 left-2 rounded-md bg-surface/90 shadow-sm">
-          <SegmentedControl<Basemap>
-            value={basemap}
-            onChange={setBasemap}
-            options={[
-              { value: 'satellite', label: 'Satellite' },
-              { value: 'streets', label: 'Map' },
-            ]}
-          />
-        </div>
-      </div>
-      <p className="text-xs text-text-muted">{hint}</p>
+      {mapTarget ? createPortal(mapBlock, mapTarget) : mapBlock}
+      {/* With the map elsewhere, the hint is shown on the map instead. */}
+      {!mapTarget && <p className="text-xs text-text-muted">{hint}</p>}
 
       {value && (
         <div className="flex flex-col gap-2 rounded-md border border-border bg-surface-2 px-3 py-2.5">

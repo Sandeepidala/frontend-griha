@@ -5,6 +5,7 @@ import { SIMULATED_AUTH_AVAILABLE } from '@/lib/dataMode'
 import { Toaster } from '@/components/ui/Toaster'
 import { Dashboard } from '@/pages/Dashboard'
 import { ForgotPassword } from '@/pages/auth/ForgotPassword'
+import { NewProject } from '@/pages/NewProject'
 import { NotFound } from '@/pages/NotFound'
 import { ResetPassword } from '@/pages/auth/ResetPassword'
 import { SignIn } from '@/pages/auth/SignIn'
@@ -36,6 +37,14 @@ export default function App() {
             element={
               <RequireAuth>
                 <Dashboard />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/projects/new"
+            element={
+              <RequireAuth>
+                <NewProject />
               </RequireAuth>
             }
           />

@@ -21,7 +21,6 @@ export function Dashboard() {
   const error = useProjectsStore((state) => state.error)
   const hasLoaded = useProjectsStore((state) => state.hasLoaded)
   const setActiveProject = useProjectsStore((state) => state.setActiveProject)
-  const openNewProjectPanel = useProjectsStore((state) => state.openNewProjectPanel)
   const fetchProjects = useProjectsStore((state) => state.fetchProjects)
   const isArchitect = useAuthStore((state) => state.user?.role === 'architect')
 
@@ -64,7 +63,7 @@ export function Dashboard() {
             icon={Building2}
             title="No projects yet"
             description="Start your first residential design — enter your plot size, budget and room requirements, or ask the AI assistant to get you started."
-            action={<Button onClick={openNewProjectPanel}>New project</Button>}
+            action={<Button onClick={() => navigate('/projects/new')}>New project</Button>}
             className="mx-auto w-full max-w-lg border-none py-0"
           />
         </Container>
@@ -90,7 +89,7 @@ export function Dashboard() {
             <h1 className="font-display text-2xl font-bold text-text sm:text-3xl">Dashboard</h1>
             <p className="mt-1 text-sm text-text-muted">An overview of every residential design in progress.</p>
           </div>
-          <Button onClick={openNewProjectPanel}>New project</Button>
+          <Button onClick={() => navigate('/projects/new')}>New project</Button>
         </div>
 
         <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
