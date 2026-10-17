@@ -1,4 +1,5 @@
 import { ClipboardList, Columns2, FileStack, Grid3x3, IndianRupee, ListChecks, MapPinned, Minus, Plus, Ruler, Scaling, ShieldCheck, Sparkles, View } from 'lucide-react'
+import { BuildSequenceButton } from '@/components/canvas/BuildSequenceButton'
 import { FloorSwitcher } from '@/components/canvas/FloorSwitcher'
 import { ReviewStatusBadge } from '@/components/reviews/ReviewParts'
 import { Badge } from '@/components/ui/Badge'
@@ -76,6 +77,8 @@ export function CanvasToolbar({
           <span className="hidden sm:inline">Generate</span>
         </Button>
       )}
+
+      {projectId && <BuildSequenceButton />}
 
       {designReport && onOpenDesignCheck && designReport.categories.length > 0 && (
         <Button variant="outline" size="sm" onClick={onOpenDesignCheck} className="shrink-0 gap-2">
