@@ -16,4 +16,8 @@ export default defineConfig({
       '@': fileURLToPath(new URL('./src', import.meta.url)),
     },
   },
+  // Loaded only when a video is made; pre-bundled so the dev server doesn't reload the page on first use.
+  optimizeDeps: {
+    include: ['mediabunny'],
+  },
 })

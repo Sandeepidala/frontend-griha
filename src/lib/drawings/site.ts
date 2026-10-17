@@ -50,6 +50,25 @@ export function gateRect(site: Site): Rect {
   }
 }
 
+/** The compound wall along the plot's edges, with the gate left open on the road side. */
+export function compoundWallRects(site: Site): Rect[] {
+  const { plot, front } = site
+  const gate = gateRect(site)
+  const edges: Record<string, Rect> = {
+    N: { x: 0, y: 0, width: plot.width, height: COMPOUND },
+    S: { x: 0, y: plot.height - COMPOUND, width: plot.width, height: COMPOUND },
+    W: { x: 0, y: 0, width: COMPOUND, height: plot.height },
+    E: { x: plot.width - COMPOUND, y: 0, width: COMPOUND, height: plot.height },
+  }
+  const out: Rect[] = []
+  for (const [side, r] of Object.entries(edges)) {
+    if (side !== front) out.push(r)
+    else if (site.horizontalFront) out.push({ ...r, width: gate.x - r.x }, { ...r, x: gate.x + gate.width, width: r.x + r.width - gate.x - gate.width })
+    else out.push({ ...r, height: gate.y - r.y }, { ...r, y: gate.y + gate.height, height: r.y + r.height - gate.y - gate.height })
+  }
+  return out.filter((r) => r.width > 0.01 && r.height > 0.01)
+}
+
 /** Paved drive from the gate to the building face (only when there's a front open space). */
 export function driveway(site: Site): Rect | null {
   const { footprint, front, plot } = site

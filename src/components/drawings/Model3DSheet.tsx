@@ -4,7 +4,7 @@ import { type FloorModel, type Rect, OUTWARD, PLINTH_HEIGHT, frontSide } from '@
 import type { ItemKind, PlacedItem } from '@/lib/drawings/interior'
 import { type Box, MASSING_COLORS, floorShellBoxes } from '@/lib/drawings/massing'
 import type { DrawingSet } from '@/lib/drawings/sheets'
-import { COMPOUND, gateRect, landscapeLayout, siteContext } from '@/lib/drawings/site'
+import { compoundWallRects, landscapeLayout, siteContext } from '@/lib/drawings/site'
 import type { FloorFinish } from '@/types/design'
 
 export type ModelMode = 'exterior' | 'interior' | 'landscape'
@@ -154,25 +154,8 @@ function Site({ set, landscape }: { set: DrawingSet; landscape: boolean }) {
   const layout = landscapeLayout(set)
   const plot = set.plot
   const P = (r: Rect, y: number) => [r.x + r.width / 2 - plot.width / 2, y, r.y + r.height / 2 - plot.height / 2] as const
-  const gate = gateRect(site)
   const wallH = 5
-  const compound: Rect[] = []
-  const { front } = site
-  const edges: Record<string, Rect> = {
-    N: { x: 0, y: 0, width: plot.width, height: COMPOUND },
-    S: { x: 0, y: plot.height - COMPOUND, width: plot.width, height: COMPOUND },
-    W: { x: 0, y: 0, width: COMPOUND, height: plot.height },
-    E: { x: plot.width - COMPOUND, y: 0, width: COMPOUND, height: plot.height },
-  }
-  for (const [side, r] of Object.entries(edges)) {
-    if (side !== front) {
-      compound.push(r)
-    } else if (site.horizontalFront) {
-      compound.push({ ...r, width: gate.x - r.x }, { ...r, x: gate.x + gate.width, width: r.x + r.width - gate.x - gate.width })
-    } else {
-      compound.push({ ...r, height: gate.y - r.y }, { ...r, y: gate.y + gate.height, height: r.y + r.height - gate.y - gate.height })
-    }
-  }
+  const compound = compoundWallRects(site)
   const top = set.models[set.models.length - 1]
   const roofLevel = top ? top.floor.elevation + top.height : 0
   return (
@@ -195,11 +178,9 @@ function Site({ set, landscape }: { set: DrawingSet; landscape: boolean }) {
           <meshStandardMaterial color={COLORS.paving} />
         </mesh>
       )}
-      {compound
-        .filter((r) => r.width > 0.01 && r.height > 0.01)
-        .map((r, i) => (
-          <BoxMesh key={i} box={{ rect: r, z0: -PLINTH_HEIGHT, z1: wallH - PLINTH_HEIGHT, color: COLORS.compound }} base={0} plot={plot} />
-        ))}
+      {compound.map((r, i) => (
+        <BoxMesh key={i} box={{ rect: r, z0: -PLINTH_HEIGHT, z1: wallH - PLINTH_HEIGHT, color: COLORS.compound }} base={0} plot={plot} />
+      ))}
       {landscape && (
         <group>
           {layout.trees.map((t, i) => (
@@ -249,7 +230,7 @@ export function Model3DSheet({ set, mode, floorId }: { set: DrawingSet; mode: Mo
   const targetY = mode === 'interior' ? 0 : ((top ? top.floor.elevation + top.height : 10) / 2) * 0.8
   const size = Math.max(set.plot.width, set.plot.height)
   return (
-    <Canvas shadows gl={{ preserveDrawingBuffer: true, antialias: true }} camera={{ position: cameraFor(set, mode), fov: 40, near: 0.5, far: 2000 }}>
+    <Canvas shadows="percentage" gl={{ preserveDrawingBuffer: true, antialias: true }} camera={{ position: cameraFor(set, mode), fov: 40, near: 0.5, far: 2000 }}>
       <color attach="background" args={[COLORS.sky]} />
       <hemisphereLight args={['#ffffff', '#a9b89a', 0.75]} />
       <directionalLight

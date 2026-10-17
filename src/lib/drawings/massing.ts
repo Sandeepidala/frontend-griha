@@ -54,24 +54,49 @@ export function wallBoxes(wall: WallSegment, openings: PlanOpening[], height: nu
   return out
 }
 
+/** The storey's wall height: floor to the underside of the slab above. */
+export function wallHeightOf(model: FloorModel) {
+  return model.height - SLAB_THICKNESS
+}
+
+/** One floor's walls, cut around their doors and windows (with the glass and main door in the holes). */
+export function floorWallBoxes(model: FloorModel): Box[] {
+  const height = wallHeightOf(model)
+  return model.walls.flatMap((w) => wallBoxes(w, model.openings, height, w.exterior ? MASSING_COLORS.wall : MASSING_COLORS.wallInterior))
+}
+
+/** One floor's slab and the chajja band at its edge; below the top floor, a sliver joining the walls above. */
+export function floorSlabBoxes(model: FloorModel, isTop: boolean): Box[] {
+  if (!model.footprint) return []
+  const fp = model.footprint
+  const boxes: Box[] = [
+    { rect: fp, z0: model.height - SLAB_THICKNESS, z1: model.height, color: MASSING_COLORS.slab },
+    // Slab edge band reads as a drip/chajja line on the facade.
+    { rect: { x: fp.x - 0.3, y: fp.y - 0.3, width: fp.width + 0.6, height: fp.height + 0.6 }, z0: model.height - SLAB_THICKNESS, z1: model.height - SLAB_THICKNESS + 0.3, color: MASSING_COLORS.slab },
+  ]
+  if (!isTop) for (const w of model.walls.filter((x) => x.exterior)) boxes.push({ rect: wallRect(w), z0: model.height, z1: model.height + 0.01, color: MASSING_COLORS.wall })
+  return boxes
+}
+
+/** The top floor's parapet on its outer walls, with the coping on top. */
+export function parapetBoxes(model: FloorModel): Box[] {
+  if (!model.footprint) return []
+  return model.walls
+    .filter((x) => x.exterior)
+    .flatMap((w) => {
+      const r = wallRect(w)
+      return [
+        { rect: r, z0: model.height, z1: model.height + PARAPET_HEIGHT, color: MASSING_COLORS.wall },
+        { rect: { x: r.x - 0.1, y: r.y - 0.1, width: r.width + 0.2, height: r.height + 0.2 }, z0: model.height + PARAPET_HEIGHT, z1: model.height + PARAPET_HEIGHT + 0.25, color: MASSING_COLORS.parapetCap },
+      ]
+    })
+}
+
 /** One floor's walls, and (seen from outside) its slab, chajja band and parapet. */
 export function floorShellBoxes(model: FloorModel, isTop: boolean, interior: boolean): Box[] {
-  const boxes: Box[] = []
-  const wallHeight = model.height - SLAB_THICKNESS
-  for (const w of model.walls) boxes.push(...wallBoxes(w, model.openings, wallHeight, w.exterior ? MASSING_COLORS.wall : MASSING_COLORS.wallInterior))
-  if (!interior && model.footprint) {
-    boxes.push({ rect: model.footprint, z0: model.height - SLAB_THICKNESS, z1: model.height, color: MASSING_COLORS.slab })
-    // Slab edge band reads as a drip/chajja line on the facade.
-    boxes.push({ rect: { x: model.footprint.x - 0.3, y: model.footprint.y - 0.3, width: model.footprint.width + 0.6, height: model.footprint.height + 0.6 }, z0: model.height - SLAB_THICKNESS, z1: model.height - SLAB_THICKNESS + 0.3, color: MASSING_COLORS.slab })
-    for (const w of model.walls.filter((x) => x.exterior)) {
-      boxes.push({ rect: wallRect(w), z0: model.height, z1: model.height + (isTop ? PARAPET_HEIGHT : 0.01), color: MASSING_COLORS.wall })
-      if (isTop) {
-        const r = wallRect(w)
-        boxes.push({ rect: { x: r.x - 0.1, y: r.y - 0.1, width: r.width + 0.2, height: r.height + 0.2 }, z0: model.height + PARAPET_HEIGHT, z1: model.height + PARAPET_HEIGHT + 0.25, color: MASSING_COLORS.parapetCap })
-      }
-    }
-  }
-  return boxes
+  const walls = floorWallBoxes(model)
+  if (interior) return walls
+  return [...walls, ...floorSlabBoxes(model, isTop), ...(isTop ? parapetBoxes(model) : [])]
 }
 
 /**

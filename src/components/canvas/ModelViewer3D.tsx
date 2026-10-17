@@ -1,8 +1,14 @@
 import { Billboard, ContactShadows, Edges, Line, OrbitControls, Text } from '@react-three/drei'
 import { Canvas } from '@react-three/fiber'
+import { Clapperboard } from 'lucide-react'
+import { Suspense, lazy, useState } from 'react'
 import { roomPalette } from '@/components/canvas/roomPalette'
+import { Button } from '@/components/ui/Button'
+import { Spinner } from '@/components/ui/Spinner'
+import { useCostEstimate } from '@/hooks/useCostEstimate'
 import { useThemeColors } from '@/hooks/useThemeColors'
 import { useDesignStore } from '@/stores/useDesignStore'
+import { useProjectsStore } from '@/stores/useProjectsStore'
 import type { FloorFinish, Room } from '@/types/design'
 
 const ACTIVE_OPACITY = 0.92
@@ -146,13 +152,58 @@ function Scene() {
   )
 }
 
+const BuildSequenceDialog = lazy(() => import('@/components/canvas/BuildSequenceDialog').then((m) => ({ default: m.BuildSequenceDialog })))
+
+/** Plays the current plan's build sequence, from marking out the plot to the garden. */
+function BuildSequenceButton() {
+  const plot = useDesignStore((state) => state.plot)
+  const floors = useDesignStore((state) => state.floors)
+  const projectId = useDesignStore((state) => state.projectId)
+  const project = useProjectsStore((state) => state.projects.find((p) => p.id === projectId) ?? null)
+  const estimate = useCostEstimate()
+  const [open, setOpen] = useState(false)
+  const hasRooms = floors.some((f) => f.rooms.length > 0)
+
+  return (
+    <>
+      <Button
+        size="sm"
+        variant="outline"
+        leftIcon={<Clapperboard className="size-4" />}
+        onClick={() => setOpen(true)}
+        disabled={!hasRooms}
+        title={hasRooms ? 'Watch this plan get built, stage by stage' : 'Add rooms to watch the plan get built'}
+        className="bg-surface/95 shadow-sm"
+      >
+        Build sequence
+      </Button>
+      {open && (
+        <Suspense fallback={<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"><Spinner size="lg" /></div>}>
+          <BuildSequenceDialog
+            onClose={() => setOpen(false)}
+            title={project?.name ?? 'Your plan'}
+            projectName={project?.name ?? ''}
+            plot={plot}
+            floors={floors}
+            brief={project?.brief ?? null}
+            estimate={estimate}
+          />
+        </Suspense>
+      )}
+    </>
+  )
+}
+
 export function ModelViewer3D() {
   const plot = useDesignStore((state) => state.plot)
 
   return (
-    <div className="h-full w-full">
+    <div className="relative h-full w-full">
+      <div className="absolute top-3 left-3 z-10">
+        <BuildSequenceButton />
+      </div>
       <Canvas
-        shadows
+        shadows="percentage"
         camera={{ position: [plot.width * 0.9, plot.height * 0.85, plot.height * 0.95], fov: 45 }}
       >
         <Scene />

@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { AlertTriangle, Check, RefreshCw, SquareDashed } from 'lucide-react'
+import { Suspense, lazy, useEffect, useState } from 'react'
+import { AlertTriangle, Check, Clapperboard, RefreshCw, SquareDashed } from 'lucide-react'
 import { LayoutOptionCard } from '@/components/canvas/LayoutOptionCard'
 import { Button } from '@/components/ui/Button'
 import { Spinner } from '@/components/ui/Spinner'
@@ -7,6 +7,9 @@ import { compliantSetbacks, requirementsFor } from '@/lib/byelaws'
 import { cn } from '@/lib/cn'
 import { generateOptions, type GenerateResult, type GeneratedOption } from '@/lib/generator'
 import { type FormState, plotFromForm } from './briefForm'
+
+// The build animation (three.js) loads only when someone opens it.
+const BuildSequenceDialog = lazy(() => import('@/components/canvas/BuildSequenceDialog').then((m) => ({ default: m.BuildSequenceDialog })))
 
 /** What the new project starts with: one of the generated layouts, or an empty plan. */
 export type LayoutChoice = { kind: 'option'; option: GeneratedOption } | { kind: 'empty' }
@@ -24,6 +27,8 @@ interface LayoutChooserProps {
  */
 export function LayoutChooser({ form, choice, onChoose }: LayoutChooserProps) {
   const [attempt, setAttempt] = useState(0)
+  // The option whose build animation is open.
+  const [watching, setWatching] = useState<GeneratedOption | null>(null)
   const basePlot = plotFromForm(form)
   const budget = Number(form.budget) > 0 ? { amount: Number(form.budget), turnkey: form.turnkey } : null
   const key = JSON.stringify({ plot: basePlot, brief: form.brief, budget, attempt })
@@ -94,15 +99,20 @@ export function LayoutChooser({ form, choice, onChoose }: LayoutChooserProps) {
                   selected={selected}
                   tag={i === 0 ? 'Recommended' : undefined}
                   footer={
-                    <Button
-                      variant={selected ? 'primary' : 'outline'}
-                      className="w-full"
-                      leftIcon={selected ? <Check className="size-4" /> : undefined}
-                      onClick={() => onChoose({ kind: 'option', option })}
-                      aria-pressed={selected}
-                    >
-                      {selected ? 'Chosen' : 'Choose this layout'}
-                    </Button>
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        variant={selected ? 'primary' : 'outline'}
+                        className="flex-1"
+                        leftIcon={selected ? <Check className="size-4" /> : undefined}
+                        onClick={() => onChoose({ kind: 'option', option })}
+                        aria-pressed={selected}
+                      >
+                        {selected ? 'Chosen' : 'Choose this layout'}
+                      </Button>
+                      <Button variant="ghost" leftIcon={<Clapperboard className="size-4" />} onClick={() => setWatching(option)}>
+                        Watch it get built
+                      </Button>
+                    </div>
                   }
                 />
               )
@@ -127,6 +137,27 @@ export function LayoutChooser({ form, choice, onChoose }: LayoutChooserProps) {
         </span>
         {empty && <Check className="size-4 shrink-0 text-primary" />}
       </button>
+
+      {watching && (
+        <Suspense fallback={<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"><Spinner size="lg" /></div>}>
+          <BuildSequenceDialog
+            onClose={() => setWatching(null)}
+            title={watching.label}
+            projectName={form.name.trim()}
+            plot={plot}
+            floors={watching.floors}
+            brief={form.brief}
+            estimate={watching.estimate}
+            action={{
+              label: watching.id === chosenId ? 'Keep this layout' : 'Choose this layout',
+              onClick: () => {
+                onChoose({ kind: 'option', option: watching })
+                setWatching(null)
+              },
+            }}
+          />
+        </Suspense>
+      )}
 
       <p className="text-xs text-text-faint">
         Generated layouts are a starting point: rooms are placed in bands (public at the front, service in the middle, bedrooms at the rear) and
