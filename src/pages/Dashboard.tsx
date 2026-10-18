@@ -62,7 +62,7 @@ export function Dashboard() {
           <EmptyState
             icon={Building2}
             title="No projects yet"
-            description="Start your first residential design — enter your plot size, budget and room requirements, or ask the AI assistant to get you started."
+            description="Start your first home design: find your plot on the map, add your budget and the rooms you need, and pick from layouts made from your brief."
             action={<Button onClick={() => navigate('/projects/new')}>New project</Button>}
             className="mx-auto w-full max-w-lg border-none py-0"
           />

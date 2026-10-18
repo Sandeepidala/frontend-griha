@@ -4,6 +4,7 @@ import { Circle, Group, Layer, Line, Rect, Stage, Text, Transformer } from 'reac
 import { useElementSize } from '@/hooks/useElementSize'
 import { useThemeColors } from '@/hooks/useThemeColors'
 import { Ruler, RULER_SIZE } from '@/components/canvas/Ruler'
+import { PlanViewControls } from '@/components/canvas/PlanViewControls'
 import { RoomsLayer } from '@/components/canvas/RoomsLayer'
 import { useSnapDrag } from '@/components/canvas/useSnapDrag'
 import { useActiveFloor, useDesignStore } from '@/stores/useDesignStore'
@@ -189,6 +190,8 @@ export function PlanCanvas2D() {
                 <RoomsLayer
                   rooms={rooms}
                   units={plot.units}
+                  scale={scale}
+                  zoom={zoom}
                   colors={colors}
                   selectedRoomId={selectedRoomId}
                   onSelect={(id) => select({ type: 'room', id })}
@@ -278,6 +281,10 @@ export function PlanCanvas2D() {
             </Stage>
           )}
         </div>
+      </div>
+
+      <div className="absolute right-4 bottom-4 z-10">
+        <PlanViewControls />
       </div>
 
       {guideDrag && (

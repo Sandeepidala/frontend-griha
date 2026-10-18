@@ -5,10 +5,12 @@ export interface PopoverProps {
   trigger: ReactNode
   children: ReactNode | ((close: () => void) => ReactNode)
   align?: 'start' | 'end'
+  /** Opens below the trigger, or above it (for a control at the bottom of the screen). */
+  side?: 'bottom' | 'top'
   panelClassName?: string
 }
 
-export function Popover({ trigger, children, align = 'end', panelClassName }: PopoverProps) {
+export function Popover({ trigger, children, align = 'end', side = 'bottom', panelClassName }: PopoverProps) {
   const [open, setOpen] = useState(false)
   const rootRef = useRef<HTMLDivElement>(null)
 
@@ -39,7 +41,8 @@ export function Popover({ trigger, children, align = 'end', panelClassName }: Po
         <div
           role="dialog"
           className={cn(
-            'absolute top-full z-40 mt-2 overflow-hidden rounded-lg border border-border bg-surface shadow-lg',
+            'absolute z-40 overflow-hidden rounded-lg border border-border bg-surface shadow-lg',
+            side === 'top' ? 'bottom-full mb-2' : 'top-full mt-2',
             'animate-[modal-in_.15s_ease-out]',
             align === 'end' ? 'right-0' : 'left-0',
             panelClassName,

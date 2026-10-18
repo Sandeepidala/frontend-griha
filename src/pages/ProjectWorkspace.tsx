@@ -2,6 +2,7 @@ import { Suspense, lazy, useEffect, useState } from 'react'
 import { Sparkles } from 'lucide-react'
 import { useParams } from 'react-router-dom'
 import { CanvasToolbar } from '@/components/canvas/CanvasToolbar'
+import { FloorSwitcher } from '@/components/canvas/FloorSwitcher'
 import { CostEstimatePanel } from '@/components/canvas/CostEstimatePanel'
 import { DesignCheckPanel } from '@/components/canvas/DesignCheckPanel'
 import { GeneratePanel } from '@/components/canvas/GeneratePanel'
@@ -63,6 +64,11 @@ export function ProjectWorkspace() {
       {status === 'idle' && <ReviewPanel key={id} open={reviewOpen} onClose={() => setReviewOpen(false)} onChange={setLatestReview} />}
       {status === 'idle' && viewMode !== 'drawings' && viewMode !== 'site' && <SelectionToolbar />}
       <div className="relative min-h-0 flex-1">
+        {status === 'idle' && (viewMode === '2d' || viewMode === '3d' || viewMode === 'split') && (
+          <div className="absolute bottom-4 left-8 z-20">
+            <FloorSwitcher orientation="vertical" />
+          </div>
+        )}
         {status === 'idle' && planIsEmpty && viewMode !== 'drawings' && viewMode !== 'site' && (
           // A new project starts empty: offer to generate a plan from the brief.
           <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center p-6">

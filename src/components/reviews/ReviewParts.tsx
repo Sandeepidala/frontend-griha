@@ -17,22 +17,17 @@ const STATUS: Record<ReviewStatus, { label: string; variant: 'neutral' | 'primar
   cancelled: { label: 'Cancelled', variant: 'neutral' },
 }
 
-export function ReviewStatusBadge({ review }: { review: Pick<ReviewSummary, 'status' | 'outcome'> }) {
-  if (review.status === 'completed' && review.outcome) {
-    return review.outcome === 'approved' ? (
-      <Badge variant="success" dot>
-        Approved
-      </Badge>
-    ) : (
-      <Badge variant="warning" dot>
-        Changes requested
-      </Badge>
-    )
-  }
-  const { label, variant } = STATUS[review.status]
+/** A review's status. `compact` shows only the coloured dot on narrower screens (the words stay for screen readers). */
+export function ReviewStatusBadge({ review, compact }: { review: Pick<ReviewSummary, 'status' | 'outcome'>; compact?: boolean }) {
+  const { label, variant } =
+    review.status === 'completed' && review.outcome
+      ? review.outcome === 'approved'
+        ? { label: 'Approved', variant: 'success' as const }
+        : { label: 'Changes requested', variant: 'warning' as const }
+      : STATUS[review.status]
   return (
-    <Badge variant={variant} dot>
-      {label}
+    <Badge variant={variant} dot title={compact ? label : undefined}>
+      {compact ? <span className="sr-only 2xl:not-sr-only">{label}</span> : label}
     </Badge>
   )
 }

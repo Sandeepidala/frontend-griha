@@ -28,16 +28,16 @@ function FloorPlanTile() {
         ))}
       </svg>
       <p className="mt-2 text-xs font-medium text-white/90">3BHK · North-facing · 30×40 plot</p>
-      <p className="text-[11px] text-white/50">Auto-dimensioned 2D floor plan</p>
+      <p className="text-[11px] text-white/50">Layout options from your brief</p>
     </div>
   )
 }
 
-function StatTile() {
+function DrawingsTile() {
   return (
     <div className="col-span-2 flex flex-col justify-center rounded-sm border border-white/10 bg-[#1e2126] p-4">
-      <p className="font-display text-3xl font-bold text-[#e0a94a] tabular-nums">12,000+</p>
-      <p className="mt-1 text-xs text-white/60">floor plans generated across India</p>
+      <p className="font-display text-3xl font-bold text-[#e0a94a]">PDF + DXF</p>
+      <p className="mt-1 text-xs text-white/60">A full drawing set: architectural, structural, electrical and plumbing sheets</p>
     </div>
   )
 }
@@ -54,7 +54,7 @@ function CompassTile() {
           N
         </text>
       </svg>
-      <p className="text-xs text-white/70">Every layout checked against Vastu Shastra</p>
+      <p className="text-xs text-white/70">Every layout checked for Vastu, daylight, privacy and setbacks</p>
     </div>
   )
 }
@@ -67,18 +67,18 @@ function IsometricRoomTile() {
         <polygon points="12,29 50,50 50,92 12,71" fill="#24272c" />
         <polygon points="88,29 50,50 50,92 88,71" fill="#2e3136" />
       </svg>
-      <p className="text-xs text-white/70">Photoreal 3D walkthroughs, generated instantly</p>
+      <p className="text-xs text-white/70">Watch your home get built in 3D, stage by stage, and share it as a video</p>
     </div>
   )
 }
 
-function TestimonialTile() {
+function CostTile() {
   return (
-    <div className="col-span-2 flex flex-col justify-center rounded-sm border border-white/10 bg-[#1e2126] p-4">
-      <p className="text-xs leading-relaxed text-white/80">
-        "The AI understood our need for a north-east pooja room instantly."
-      </p>
-      <p className="mt-1.5 text-[11px] text-white/50">— Priya R., Bengaluru</p>
+    <div className="col-span-2 flex flex-col justify-center gap-2 rounded-sm border border-white/10 bg-[#1e2126] p-4">
+      <div className="h-2 overflow-hidden rounded-full bg-white/10" aria-hidden>
+        <div className="h-full w-4/5 rounded-full bg-[#7cc48a]" />
+      </div>
+      <p className="text-xs text-white/70">A room-wise cost estimate that updates as you design, checked against your budget</p>
     </div>
   )
 }
@@ -92,20 +92,20 @@ export function AuthShowcase({ className }: { className?: string }) {
             <span className="font-display text-lg font-semibold text-white">Griha</span>
           </div>
           <p className="mt-4 max-w-sm font-display text-2xl leading-snug font-semibold text-white">
-            AI-powered home design, built for Indian families
+            From plot to drawings, for Indian homes
           </p>
         </div>
 
         <div className="mt-8 grid flex-1 grid-cols-4 grid-rows-3 gap-3">
           <FloorPlanTile />
-          <StatTile />
+          <DrawingsTile />
           <CompassTile />
           <IsometricRoomTile />
-          <TestimonialTile />
+          <CostTile />
         </div>
 
         <p className="mt-6 text-[11px] text-white/40">
-          Vastu-reviewed · Room-wise BOQ included · Exports to AutoCAD, Revit &amp; SolidWorks
+          Design check · Room-wise cost estimate · Drawings as PDF and DXF (opens in AutoCAD)
         </p>
       </div>
     </div>
