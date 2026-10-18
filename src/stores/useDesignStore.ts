@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { ApiError } from '@/lib/apiClient'
+import type { RoomChange } from '@/lib/chatApi'
 import * as floorsApi from '@/lib/floorsApi'
 import * as projectsApi from '@/lib/projectsApi'
 import * as roomsApi from '@/lib/roomsApi'
@@ -116,6 +117,10 @@ interface DesignState {
   setOpeningEdit: (key: string, edit: OpeningEdit | null) => void
   /** Puts every door and window on the active floor back where the rules place them. */
   resetOpeningEdits: () => void
+  /** Shows room changes the server has already saved (the design assistant's) in the plan, on any floor. */
+  applyRoomChanges: (changes: RoomChange[]) => void
+  /** Undoes such changes, saving each step; false if some couldn't be undone. */
+  revertRoomChanges: (changes: RoomChange[]) => Promise<boolean>
   setActiveSheetId: (id: string) => void
 }
 
@@ -542,6 +547,60 @@ export const useDesignStore = create<DesignState>((set, get) => ({
       selection: state.selection?.type === 'opening' ? null : state.selection,
     }))
     queueOpeningEditsSave(get())
+  },
+
+  applyRoomChanges: (changes) => {
+    set((state) => {
+      let floors = state.floors
+      for (const change of changes) {
+        if (change.kind === 'removed' && change.before) {
+          const id = change.before.id
+          floors = mapFloor(floors, change.floorId, (floor) => ({ ...floor, rooms: floor.rooms.filter((r) => r.id !== id) }))
+        } else if (change.room) {
+          const room = change.room
+          floors = mapFloor(floors, change.floorId, (floor) => ({
+            ...floor,
+            rooms: floor.rooms.some((r) => r.id === room.id) ? floor.rooms.map((r) => (r.id === room.id ? room : r)) : [...floor.rooms, room],
+          }))
+        }
+      }
+      const removed = new Set(changes.flatMap((c) => (c.kind === 'removed' && c.before ? [c.before.id] : [])))
+      const selection = state.selection?.type === 'room' && removed.has(state.selection.id) ? null : state.selection
+      return { floors, selection }
+    })
+  },
+
+  revertRoomChanges: async (changes) => {
+    const { projectId } = get()
+    if (!projectId) return false
+    await flushSaves()
+    const undone: RoomChange[] = []
+    let ok = true
+    try {
+      // Newest first, so each step finds the plan as the change after it left it.
+      for (const change of [...changes].reverse()) {
+        if (change.kind === 'added' && change.room) {
+          await roomsApi.deleteRoom(projectId, change.room.id)
+          cancelSave(`room:${change.room.id}`)
+          undone.push({ kind: 'removed', floorId: change.floorId, room: null, before: change.room })
+        } else if (change.kind === 'removed' && change.before) {
+          const { id: _id, ...fields } = change.before
+          const restored = await roomsApi.createRoom(projectId, change.floorId, fields)
+          undone.push({ kind: 'added', floorId: change.floorId, room: restored, before: null })
+        } else if (change.kind === 'updated' && change.room && change.before) {
+          const { name, type, x, y, width, height } = change.before
+          await roomsApi.updateRoom(projectId, change.room.id, { name, type, x, y, width, height })
+          // Keep anything else the user has changed on the room since.
+          const current = get().floors.flatMap((f) => f.rooms).find((r) => r.id === change.room?.id) ?? change.room
+          undone.push({ kind: 'updated', floorId: change.floorId, room: { ...current, name, type, x, y, width, height }, before: current })
+        }
+      }
+    } catch (err) {
+      toast.danger(errorMessage(err, "Couldn't undo all of the assistant's changes."))
+      ok = false
+    }
+    if (get().projectId === projectId) get().applyRoomChanges(undone)
+    return ok
   },
   setActiveSheetId: (id) => set({ activeSheetId: id }),
 }))
