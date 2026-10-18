@@ -25,7 +25,9 @@ import {
   waterSupplyPlan,
   type ElecKind,
 } from '@/lib/drawings/services'
+import { buildFacade } from '@/lib/drawings/facade'
 import { buildDrawingSet } from '@/lib/drawings/sheets'
+import { type Look, lookFor } from '@/lib/style/kits'
 import type { ProjectBrief } from '@/types/brief'
 import type { Floor, FloorFinish, Plot, RoomType } from '@/types/design'
 import { OVERHEADS, RATES, RATES_AS_OF, locationFactor, type RateKey, type RateUnit } from './rates'
@@ -170,6 +172,14 @@ class Builder {
   }
 }
 
+/** What the house style adds: its roof, verandah, sunshades and details, measured from the styled model. */
+function styleSection(b: Builder, models: FloorModel[], plot: Plot, look: Look) {
+  const { takeoff } = buildFacade(models, plot, look)
+  if (takeoff.length === 0) return
+  const section = b.section({ id: 'style', title: `House style: ${look.kit.name}`, kind: 'building' })
+  for (const item of takeoff) b.line(section, item.key, item.quantity)
+}
+
 /** Masonry or finish area of a wall: length × height, less its doors and windows. */
 function netWallArea(wall: WallSegment, height: number, openings: PlanOpening[]) {
   const deductions = openings.filter((o) => o.wall.id === wall.id).reduce((sum, o) => sum + openingArea(o), 0)
@@ -183,7 +193,15 @@ function doorOwner(opening: PlanOpening, rooms: Map<string, PlanRoom>): string |
   return candidates[0]?.id
 }
 
-function buildingSections(b: Builder, models: FloorModel[], floors: Floor[], set: ReturnType<typeof buildDrawingSet>, front: ReturnType<typeof frontSide>, site: SiteLocation | null | undefined) {
+function buildingSections(
+  b: Builder,
+  models: FloorModel[],
+  floors: Floor[],
+  set: ReturnType<typeof buildDrawingSet>,
+  front: ReturnType<typeof frontSide>,
+  site: SiteLocation | null | undefined,
+  look: Look,
+) {
   const lowest = models[0]
   const columns = set.columns
 
@@ -247,9 +265,10 @@ function buildingSections(b: Builder, models: FloorModel[], floors: Floor[], set
   b.line(walls, 'brick115', partitions)
   b.line(walls, 'plasterExternal', external)
   b.line(walls, 'paintExternal', external)
-  // Each floor's roof is whatever the floor above doesn't cover.
+  // Each floor's roof is whatever the floor above doesn't cover; under a tiled roof the top one needs no waterproofing.
   const floorArea = models.map((m) => m.rooms.reduce((s, r) => s + sqftOf(r), 0))
-  b.line(walls, 'roofWaterproofing', floorArea.reduce((s, a, i) => s + Math.max(0, a - (floorArea[i + 1] ?? 0)), 0))
+  const covered = (i: number) => look.kit.roof === 'hip' && i === models.length - 1
+  b.line(walls, 'roofWaterproofing', floorArea.reduce((s, a, i) => s + (covered(i) ? 0 : Math.max(0, a - (floorArea[i + 1] ?? 0))), 0))
 
   const services = b.section({ id: 'services', title: 'Plumbing & electrical: common', kind: 'building' })
   let water = 0
@@ -354,9 +373,11 @@ export function estimateBoq(input: BoqInput): BoqEstimate {
   const set = buildDrawingSet(input.plot, input.floors, '', '')
   const models = set.models
   const b = new Builder(location.factor)
+  const look = lookFor(input.brief)
 
   if (models.some((m) => m.rooms.length > 0)) {
-    buildingSections(b, models, input.floors, set, frontSide(input.plot), input.site)
+    buildingSections(b, models, input.floors, set, frontSide(input.plot), input.site, look)
+    styleSection(b, models, input.plot, look)
     roomSections(b, models, set)
   }
 

@@ -2,8 +2,10 @@ import type { BoqEstimate } from '@/lib/boq'
 import type { RateKey } from '@/lib/boq/rates'
 import type { ProjectBrief } from '@/types/brief'
 import type { Floor, Plot } from '@/types/design'
+import { lookFor } from '@/lib/style/kits'
+import { type FacadeSolid, buildFacade, panelColors, wallColorFor } from './facade'
 import { type Rect, type Side, type WallSegment, PLINTH_HEIGHT, frontSide, wallRect } from './geometry'
-import { type Box, MASSING_COLORS, floorSlabBoxes, parapetBoxes, wallBoxes, wallHeightOf } from './massing'
+import { type Box, MASSING_COLORS, wallBoxes, wallHeightOf } from './massing'
 import { type Column, deriveBeams, deriveFootings } from './services'
 import { buildDrawingSet } from './sheets'
 import { compoundWallRects, driveway, gateRect, landscapeLayout, siteContext } from './site'
@@ -15,8 +17,8 @@ import { compoundWallRects, driveway, gateRect, landscapeLayout, siteContext } f
  * animation, how many weeks each stage indicatively takes and what it costs from the estimate.
  *
  * Plan feet, heights in feet from the ground. When the sequence ends, the building pieces are
- * exactly the 3D model's (buildingBoxes): the structure hidden inside the walls is gone, and the raw
- * brick and concrete have turned into the finished colours.
+ * exactly the 3D model's (the house in its style, lib/drawings/facade): the structure hidden inside
+ * the walls is gone, and the raw brick and concrete have turned into the finished colours.
  */
 
 export const RAW_COLORS = {
@@ -135,6 +137,9 @@ const lift = (box: Box, by: number): Box => ({ ...box, z0: box.z0 + by, z1: box.
 export function constructionSequence({ plot, floors, brief, estimate }: BuildInput): BuildSequence {
   const set = buildDrawingSet(plot, floors, '', '', { brief })
   const models = set.models.filter((m) => m.footprint)
+  const look = lookFor(brief)
+  const facade = buildFacade(set.models, plot, look)
+  const facadeOf = (stage: FacadeSolid['stage'], floorId?: string) => facade.solids.filter((s) => s.stage === stage && (!floorId || s.floorId === floorId))
   const site = siteContext(set)
   const front = frontSide(plot)
   const columns = set.columns
@@ -231,7 +236,7 @@ export function constructionSequence({ plot, floors, brief, estimate }: BuildInp
       pieces.push(piece)
       finishRefs.push(piece)
     })
-    pieces.push({ rect: ground.footprint!, z0: 0, z1: PLINTH_HEIGHT, color: MASSING_COLORS.plinth, raw: RAW_COLORS.plinthFill, ...stagger(plinth, 0, 0.55, 1, 0), growth: 'up', part: 'building' })
+    for (const box of facadeOf('plinth')) pieces.push({ ...box, raw: RAW_COLORS.plinthFill, ...stagger(plinth, 0, 0.55, 1, 0), growth: 'up', part: 'building' })
   }
   // The pits are backfilled and the outline is covered once the plinth is done.
   for (const p of [...pitRefs, ...outlineRefs]) p.until = plinth.end
@@ -254,7 +259,6 @@ export function constructionSequence({ plot, floors, brief, estimate }: BuildInp
   models.forEach((model, i) => {
     const base = model.floor.elevation + PLINTH_HEIGHT
     const wallH = wallHeightOf(model)
-    const isTop = i === models.length - 1
     const share = areas[i] / totalArea
     const name = model.floor.name
 
@@ -272,13 +276,13 @@ export function constructionSequence({ plot, floors, brief, estimate }: BuildInp
     const openings: Box[] = []
     const beams: { box: Box; wall: WallSegment }[] = []
     for (const w of model.walls) {
-      const finished = w.exterior ? MASSING_COLORS.wall : MASSING_COLORS.wallInterior
+      const finished = w.exterior ? wallColorFor(look, i, models.length) : MASSING_COLORS.wallInterior
       const highestOpening = model.openings.filter((o) => o.wall.id === w.id).reduce((top, o) => Math.max(top, o.sill + o.height), 0)
       const depth = Math.max(...deriveBeams([w], columns).map((b) => b.depthMm / 304.8), 1)
       const soffit = Math.min(wallH, Math.max(wallH - depth, highestOpening))
-      if (soffit < wallH) beams.push({ box: { rect: wallRect(w), z0: soffit, z1: wallH, color: finished }, wall: w })
-      for (const box of wallBoxes(w, model.openings, wallH, finished)) {
-        if (box.color === MASSING_COLORS.glass || box.color === MASSING_COLORS.door) {
+      if (soffit < wallH) beams.push({ box: { rect: wallRect(w), z0: soffit, z1: wallH, color: finished, role: w.exterior ? 'wall' : 'wall-interior' }, wall: w })
+      for (const box of wallBoxes(w, model.openings, wallH, finished, undefined, panelColors(look))) {
+        if (box.role === 'glass' || box.role === 'door') {
           openings.push(box)
           continue
         }
@@ -289,9 +293,8 @@ export function constructionSequence({ plot, floors, brief, estimate }: BuildInp
     byFront(beams, (b) => b.box.rect).forEach(({ item }, j, all) =>
       pieces.push({ ...lift(item.box, base), raw: RAW_COLORS.concrete, ...stagger(frame, rank(j, all.length), 0.3, 0.7), growth: 'up', part: 'building' }),
     )
-    for (const box of floorSlabBoxes(model, isTop)) {
-      const sliver = box.z1 - box.z0 < 0.05
-      pieces.push({ ...lift(box, base), raw: RAW_COLORS.concrete, ...stagger(frame, 0, 0.6, 1, 0), growth: sliver ? 'pop' : 'sweep', from: front, part: 'building' })
+    for (const box of facadeOf('frame', model.floor.id)) {
+      pieces.push({ ...box, raw: RAW_COLORS.concrete, ...stagger(frame, 0, 0.6, 1, 0), growth: 'sweep', from: front, part: 'building' })
     }
 
     const walls = stage(`walls-${model.floor.id}`, `${name}: brick walls`, 'Brick walls are built up between the columns, leaving the door and window openings.', 2.6, 3)
@@ -317,19 +320,45 @@ export function constructionSequence({ plot, floors, brief, estimate }: BuildInp
     byFront(openings, (b) => b.rect).forEach(({ item }, j, all) => pieces.push({ ...lift(item, base), ...stagger(frames, rank(j, all.length), 0, 1, 0.7), growth: 'pop', part: 'building' }))
   })
 
-  // 6. Parapet.
-  const top = models[models.length - 1]
-  if (top) {
-    const parapet = stage('parapet', 'Parapet and terrace', 'The parapet goes up around the terrace, and the roof is waterproofed.', 1.2, 1)
+  // 6. The roof: a parapet round the terrace, or the style's sloped roof.
+  const topSolids = facadeOf('top')
+  if (models.length > 0 && topSolids.length > 0) {
+    const sloped = look.kit.roof === 'hip'
+    const parapet = sloped
+      ? stage('parapet', 'Roof: timber frame and clay tiles', 'The roof frame goes up over the top floor and is covered in clay tiles, with wide eaves all round.', 1.6, 2)
+      : stage('parapet', 'Parapet and terrace', 'The parapet goes up around the terrace, and the roof is waterproofed.', 1.2, 1)
     costs.set('parapet', wallsCost * 0.1)
-    const base = top.floor.elevation + PLINTH_HEIGHT
-    for (const box of parapetBoxes(top)) {
-      const coping = box.color === MASSING_COLORS.parapetCap
-      pieces.push({ ...lift(box, base), raw: coping ? RAW_COLORS.concrete : RAW_COLORS.brick, ...stagger(parapet, 0, coping ? 0.6 : 0, coping ? 1 : 0.7, 0), growth: 'up', part: 'building' })
+    for (const box of topSolids) {
+      const late = box.role === 'coping' || box.role === 'railing' || box.role === 'fascia' || box.shape?.kind === 'dome'
+      const raw = box.role === 'parapet' ? RAW_COLORS.brick : box.role === 'coping' || box.role === 'dome' ? RAW_COLORS.concrete : undefined
+      pieces.push({ ...box, raw, ...stagger(parapet, 0, late ? 0.6 : 0, late ? 1 : 0.7, 0), growth: 'up', part: 'building' })
     }
   }
 
-  // 7. Finishing: services, plaster and paint, the rooms' finishes (and interiors on a turnkey budget).
+  // 7. The style's details: sit-out, sunshades, cladding, jharokhas, pergola, chhatri.
+  const details = facadeOf('details')
+  if (details.length > 0) {
+    const has = (...roles: Box['role'][]) => details.some((d) => roles.includes(d.role))
+    const named = [
+      has('pillar', 'porch') ? 'the sit-out' : null,
+      has('jharokha') ? 'the jharokhas' : null,
+      has('shade') ? 'the sunshades' : null,
+      has('cladding') ? 'the cladding' : null,
+      has('pergola') ? 'the pergola' : null,
+      has('dome') ? (look.kit.domes === 'chhatri' ? 'the chhatri' : 'the domes') : null,
+    ].filter((n): n is string => !!n)
+    const list = named.length ? named.join(', ').replace(/, ([^,]*)$/, ' and $1') : 'the window sills'
+    const detail = stage('details', `${look.kit.name} details`, `${list.replace(/^./, (c) => c.toUpperCase())} go up, finishing the ${look.kit.name.toLowerCase()} look.`, 1.6, 2)
+    costs.set('details', sectionTotal(estimate, 'style'))
+    byFront(details, (d) => d.rect).forEach(({ item }, j, all) => {
+      const tiles = item.shape?.kind === 'slope' && item.color === look.palette.roof
+      const raw = tiles || item.role === 'cladding' || item.role === 'pergola' || item.color === look.palette.wood ? undefined : RAW_COLORS.concrete
+      const growth = item.role === 'pillar' || item.role === 'pergola' || item.role === 'cladding' ? 'up' : 'pop'
+      pieces.push({ ...item, raw, ...stagger(detail, rank(j, all.length), 0, 1, 0.75), growth, part: 'building' })
+    })
+  }
+
+  // 8. Finishing: services, plaster and paint, the rooms' finishes (and interiors on a turnkey budget).
   const interiors = !!estimate?.includeInteriors
   const finishing = stage(
     'finishing',
@@ -343,7 +372,7 @@ export function constructionSequence({ plot, floors, brief, estimate }: BuildInp
   costs.set('finishing', sectionTotal(estimate, 'services') + wallsCost * 0.2 + roomFinishes)
   for (const p of finishRefs) p.until = finishing.start
 
-  // 8. The compound, gate, drive and garden.
+  // 9. The compound, gate, drive and garden.
   const outside = stage('outside', 'Compound wall, gate and garden', 'The compound wall, gate, drive and garden finish the site.', 2, 2)
   const compound = compoundWallRects(site)
   byFront(compound, (r) => r).forEach(({ item: rect }, i, all) =>

@@ -35,5 +35,7 @@ export interface ProjectBrief {
   familyType: FamilyType
   needsGroundFloorBedroom: boolean
   style: DesignStyle
+  /** The style's colour scheme (lib/style/kits); null for the style's first. */
+  palette: string | null
   vastu: boolean
 }

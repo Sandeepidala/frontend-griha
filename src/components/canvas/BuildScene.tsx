@@ -4,6 +4,8 @@ import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { type BuildSequence, RAW_COLORS, pieceProgress } from '@/lib/drawings/construction'
 import { OUTWARD, frontSide } from '@/lib/drawings/geometry'
+import { finishFor, shapeGeometry } from '@/lib/three/solids'
+import { HouseLights } from '@/components/three/HouseLights'
 import type { BuildClock } from './buildClock'
 
 const SCENE_COLORS = {
@@ -51,20 +53,37 @@ export function BuildScene({ sequence, clock, onEnd, onGrabCamera }: BuildSceneP
   const scene = useMemo(() => {
     const group = new THREE.Group()
     const geometry = new THREE.BoxGeometry(1, 1, 1)
+    // Boxes share a unit cube scaled to size; roofs, columns and domes get geometry of their own size.
+    const shaped: THREE.BufferGeometry[] = []
     const materials = new Map<string, { material: THREE.MeshStandardMaterial; raw: THREE.Color; finished: THREE.Color }>()
     const meshes = sequence.pieces.map((piece) => {
-      const key = `${piece.raw ?? piece.color}|${piece.color}|${piece.opacity ?? 1}`
+      const curved = !!piece.shape && piece.shape.kind !== 'box'
+      const finish = finishFor(piece.role)
+      const key = `${piece.raw ?? piece.color}|${piece.color}|${piece.opacity ?? 1}|${finish.roughness}|${curved}`
       let entry = materials.get(key)
       if (!entry) {
         const raw = new THREE.Color(piece.raw ?? piece.color)
         entry = {
-          material: new THREE.MeshStandardMaterial({ color: raw.clone(), roughness: 0.85, transparent: !!piece.opacity, opacity: piece.opacity ?? 1 }),
+          material: new THREE.MeshStandardMaterial({
+            color: raw.clone(),
+            roughness: finish.roughness,
+            metalness: finish.metalness,
+            transparent: !!piece.opacity,
+            opacity: piece.opacity ?? 1,
+            side: curved ? THREE.DoubleSide : THREE.FrontSide,
+          }),
           raw,
           finished: new THREE.Color(piece.color),
         }
         materials.set(key, entry)
       }
-      const mesh = new THREE.Mesh(geometry, entry.material)
+      let pieceGeometry: THREE.BufferGeometry = geometry
+      if (curved) {
+        pieceGeometry = shapeGeometry(piece.shape, Math.max(0.01, piece.rect.width), Math.max(0.01, piece.z1 - piece.z0), Math.max(0.01, piece.rect.height))
+        shaped.push(pieceGeometry)
+      }
+      const mesh = new THREE.Mesh(pieceGeometry, entry.material)
+      mesh.userData.unit = !curved
       mesh.castShadow = !piece.opacity
       mesh.receiveShadow = true
       mesh.visible = false
@@ -105,6 +124,7 @@ export function BuildScene({ sequence, clock, onEnd, onGrabCamera }: BuildSceneP
     const plotMaterial = new THREE.MeshStandardMaterial({ color: RAW_COLORS.soil })
     const dispose = () => {
       geometry.dispose()
+      for (const g of shaped) g.dispose()
       trunkGeometry.dispose()
       leafGeometry.dispose()
       for (const m of materials.values()) m.material.dispose()
@@ -120,9 +140,10 @@ export function BuildScene({ sequence, clock, onEnd, onGrabCamera }: BuildSceneP
   const soil = useMemo(() => new THREE.Color(RAW_COLORS.soil), [])
   const lawn = useMemo(() => new THREE.Color(SCENE_COLORS.lawn), [])
   const front = OUTWARD[frontSide(plot)]
-  // Swing round from one side to finish on a three-quarter view of the road side.
+  // Swing round from one side to finish on a three-quarter view of the road side, on the side away
+  // from the sun (HouseLights), so the roof's faces and the walls catch the light differently.
   const frontAngle = Math.atan2(front.y, front.x)
-  const startAngle = frontAngle - 0.8
+  const startAngle = frontAngle + 0.8
   // Further back on a tall, narrow screen (a phone held upright), so the whole house stays in view.
   const radius = size * 1.55 * Math.max(1, 1.25 / aspect)
 
@@ -164,7 +185,9 @@ export function BuildScene({ sequence, clock, onEnd, onGrabCamera }: BuildSceneP
           cx = piece.from === 'W' ? rect.x + sx / 2 : rect.x + w - sx / 2
         }
       }
-      mesh.scale.set(sx, sy, sz)
+      // A unit cube scales to size; geometry made at full size scales by the fraction grown.
+      if (mesh.userData.unit) mesh.scale.set(sx, sy, sz)
+      else mesh.scale.set(sx / w, sy / h, sz / d)
       mesh.position.set(cx - plot.width / 2, piece.z0 + sy / 2, cz - plot.height / 2)
       if (piece.part !== 'site') top = Math.max(top, piece.z0 + sy)
     })
@@ -185,7 +208,7 @@ export function BuildScene({ sequence, clock, onEnd, onGrabCamera }: BuildSceneP
     // is only for coming back to the path after the viewer has moved the camera.
     lookAt.current.y = Math.max(3, top * 0.55)
     if (clock.autoCamera) {
-      const angle = startAngle + (t / sequence.duration) * 1.3
+      const angle = startAngle - (t / sequence.duration) * 1.3
       const y = size * 0.55 + Math.max(top, 6) * 1.05
       goal.current.set(Math.cos(angle) * radius, y, Math.sin(angle) * radius)
       const away = camera.position.distanceTo(goal.current)
@@ -199,19 +222,7 @@ export function BuildScene({ sequence, clock, onEnd, onGrabCamera }: BuildSceneP
   return (
     <>
       <color attach="background" args={[SCENE_COLORS.sky]} />
-      <hemisphereLight args={['#ffffff', '#a9b89a', 0.8]} />
-      <directionalLight
-        position={[size * 0.8, size * 1.5, size * 0.6]}
-        intensity={1.5}
-        castShadow
-        shadow-mapSize-width={2048}
-        shadow-mapSize-height={2048}
-        shadow-camera-left={-size * 1.3}
-        shadow-camera-right={size * 1.3}
-        shadow-camera-top={size * 1.3}
-        shadow-camera-bottom={-size * 1.3}
-        shadow-bias={-0.0004}
-      />
+      <HouseLights size={size} front={frontSide(plot)} />
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.03, 0]} receiveShadow>
         <planeGeometry args={[size * 6, size * 6]} />
         <meshStandardMaterial color={SCENE_COLORS.grass} />

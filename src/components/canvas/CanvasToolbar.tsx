@@ -1,5 +1,6 @@
 import { ClipboardList, Columns2, FileStack, IndianRupee, ListChecks, MapPinned, Scaling, ShieldCheck, Sparkles, View } from 'lucide-react'
 import { BuildSequenceButton } from '@/components/canvas/BuildSequenceButton'
+import { StyleButton } from '@/components/style/StylePicker'
 import { ReviewStatusBadge } from '@/components/reviews/ReviewParts'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
@@ -66,6 +67,8 @@ export function CanvasToolbar({
           <span className="sr-only xl:not-sr-only">Generate</span>
         </Button>
       )}
+
+      {projectId && <StyleButton />}
 
       {projectId && <BuildSequenceButton />}
 

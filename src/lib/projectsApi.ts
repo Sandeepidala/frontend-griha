@@ -33,6 +33,7 @@ export interface BriefDto {
   family_type: FamilyType
   needs_ground_floor_bedroom: boolean
   style: DesignStyle
+  palette?: string | null
   vastu: boolean
 }
 
@@ -55,6 +56,7 @@ function mapBrief(dto: BriefDto): ProjectBrief {
     familyType: dto.family_type,
     needsGroundFloorBedroom: dto.needs_ground_floor_bedroom,
     style: dto.style,
+    palette: dto.palette ?? null,
     vastu: dto.vastu,
   }
 }
@@ -77,6 +79,7 @@ export function briefToDto(brief: ProjectBrief): BriefDto {
     family_type: brief.familyType,
     needs_ground_floor_bedroom: brief.needsGroundFloorBedroom,
     style: brief.style,
+    palette: brief.palette,
     vastu: brief.vastu,
   }
 }

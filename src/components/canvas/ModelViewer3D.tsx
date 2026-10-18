@@ -1,8 +1,15 @@
+import { useDeferredValue, useMemo, useState } from 'react'
 import { Billboard, ContactShadows, Edges, Line, OrbitControls, Text } from '@react-three/drei'
 import { Canvas } from '@react-three/fiber'
+import { Boxes, Home } from 'lucide-react'
 import { roomPalette } from '@/components/canvas/roomPalette'
+import { Model3DSheet } from '@/components/drawings/Model3DSheet'
+import { StyleButton } from '@/components/style/StylePicker'
+import { SegmentedControl } from '@/components/ui/SegmentedControl'
 import { useThemeColors } from '@/hooks/useThemeColors'
+import { buildDrawingSet } from '@/lib/drawings/sheets'
 import { useDesignStore } from '@/stores/useDesignStore'
+import { useProjectsStore } from '@/stores/useProjectsStore'
 import type { FloorFinish, Room } from '@/types/design'
 
 const ACTIVE_OPACITY = 0.92
@@ -146,17 +153,73 @@ function Scene() {
   )
 }
 
-export function ModelViewer3D() {
+type View = 'house' | 'rooms'
+
+const VIEW_OPTIONS = [
+  { value: 'house' as const, label: 'House', icon: Home },
+  { value: 'rooms' as const, label: 'Rooms', icon: Boxes },
+]
+const VIEW_KEY = 'griha-3d-view'
+
+function readView(): View {
+  try {
+    return localStorage.getItem(VIEW_KEY) === 'rooms' ? 'rooms' : 'house'
+  } catch {
+    return 'house'
+  }
+}
+
+/** The house as it will be built, in its style, for the editor's 3D view; it follows every edit. */
+function HouseView() {
   const plot = useDesignStore((state) => state.plot)
+  const floors = useDesignStore((state) => state.floors)
+  const activeFloorId = useDesignStore((state) => state.activeFloorId)
+  const projectId = useDesignStore((state) => state.projectId)
+  const project = useProjectsStore((state) => state.projects.find((p) => p.id === projectId))
+  const brief = project?.brief ?? null
+  // Rebuilding the whole house can take longer than a drag frame; the plan stays smooth and the
+  // house catches up a moment later.
+  const deferredFloors = useDeferredValue(floors)
+  const deferredPlot = useDeferredValue(plot)
+  const set = useMemo(() => buildDrawingSet(deferredPlot, deferredFloors, project?.name ?? '', '', { brief }), [deferredPlot, deferredFloors, project?.name, brief])
+  return <Model3DSheet set={set} mode="exterior" floorId={activeFloorId} />
+}
+
+/** The rooms as coloured volumes, to select and check them floor by floor. */
+function RoomsView() {
+  const plot = useDesignStore((state) => state.plot)
+  return (
+    <Canvas shadows="percentage" camera={{ position: [plot.width * 0.9, plot.height * 0.85, plot.height * 0.95], fov: 45 }}>
+      <Scene />
+    </Canvas>
+  )
+}
+
+export function ModelViewer3D() {
+  const [view, setView] = useState<View>(readView)
+  const projectId = useDesignStore((state) => state.projectId)
+  const changeView = (next: View) => {
+    setView(next)
+    try {
+      localStorage.setItem(VIEW_KEY, next)
+    } catch {
+      /* storage unavailable: the choice lasts until the page reloads */
+    }
+  }
 
   return (
-    <div className="h-full w-full">
-      <Canvas
-        shadows="percentage"
-        camera={{ position: [plot.width * 0.9, plot.height * 0.85, plot.height * 0.95], fov: 45 }}
-      >
-        <Scene />
-      </Canvas>
+    <div className="relative h-full w-full">
+      {view === 'house' ? <HouseView /> : <RoomsView />}
+      <div className="pointer-events-none absolute top-3 left-3 flex flex-wrap items-center gap-2">
+        <div className="pointer-events-auto rounded-md bg-surface/90 shadow-sm backdrop-blur">
+          <SegmentedControl value={view} onChange={changeView} options={VIEW_OPTIONS} />
+        </div>
+        {projectId && view === 'house' && (
+          <div className="pointer-events-auto rounded-md bg-surface/90 shadow-sm backdrop-blur">
+            <StyleButton compact />
+          </div>
+        )}
+      </div>
     </div>
   )
 }

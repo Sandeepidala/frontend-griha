@@ -5,7 +5,9 @@ import { generateOptions } from '@/lib/generator'
 import type { Floor, Plot } from '@/types/design'
 import { type BuildPiece, constructionSequence, pieceProgress, spentAt, stageAt, weekAt } from './construction'
 import { buildBuildingModel } from './geometry'
-import { type Box, buildingBoxes } from './massing'
+import { buildFacade } from './facade'
+import type { Box } from './massing'
+import { lookFor } from '@/lib/style/kits'
 
 const plot: Plot = { width: 30, height: 40, facing: 'north', units: 'ft', setbacks: { front: 3, rear: 2, left: 2, right: 2 } }
 const brief = { ...DEFAULT_BRIEF, floors: 2, bedrooms: 3, bathrooms: 2 }
@@ -26,7 +28,7 @@ describe('constructionSequence', () => {
   const ids = sequence.stages.map((s) => s.id)
   const [ground, first] = [...floors].sort((a, b) => a.level - b.level)
 
-  it('builds in site order: foundations, then each floor frame, walls and openings, then the parapet, finishing and outside', () => {
+  it('builds in site order: foundations, then each floor frame, walls and openings, then the parapet, the style details, finishing and outside', () => {
     expect(ids).toEqual([
       'site',
       'excavation',
@@ -39,6 +41,7 @@ describe('constructionSequence', () => {
       `walls-${first.id}`,
       `openings-${first.id}`,
       'parapet',
+      'details',
       'finishing',
       'outside',
     ])
@@ -81,7 +84,7 @@ describe('constructionSequence', () => {
     const shown = sequence.pieces.filter((p) => pieceProgress(p, end) === 1)
     expect(shown.some((p) => p.part === 'temporary')).toBe(false)
     const building = shown.filter((p) => p.part === 'building')
-    const model = buildingBoxes(buildBuildingModel(floors, plot))
+    const model = buildFacade(buildBuildingModel(floors, plot), plot, lookFor(brief)).solids
     expect(volume(building)).toBeCloseTo(volume(model), 6)
     expect(Math.max(...building.map((p) => p.z1))).toBeCloseTo(Math.max(...model.map((b) => b.z1)), 6)
     // The site works stay: the compound wall and gate.
@@ -129,5 +132,21 @@ describe('constructionSequence', () => {
     const bare = constructionSequence({ plot, floors: empty, brief, estimate: null })
     expect(bare.pieces.some((p) => p.part === 'building')).toBe(false)
     expect(bare.stages.some((s) => s.id.startsWith('frame-'))).toBe(false)
+  })
+})
+
+describe('constructionSequence in a style', () => {
+  const keralaBrief = { ...brief, style: 'kerala' as const }
+  const floors = twoStoreyHouse()
+  const estimate = estimateBoq({ plot, floors, brief: keralaBrief, budget })
+  const sequence = constructionSequence({ plot, floors, brief: keralaBrief, estimate })
+
+  it('puts up the tiled roof instead of a parapet, then the style details, and ends as the styled 3D model', () => {
+    expect(sequence.stages.find((s) => s.id === 'parapet')?.title).toBe('Roof: timber frame and clay tiles')
+    expect(sequence.stages.find((s) => s.id === 'details')?.title).toBe('Kerala details')
+    const shown = sequence.pieces.filter((p) => p.part === 'building' && pieceProgress(p, sequence.duration) === 1)
+    const model = buildFacade(buildBuildingModel(floors, plot), plot, lookFor(keralaBrief)).solids
+    expect(volume(shown)).toBeCloseTo(volume(model), 6)
+    expect(shown.some((p) => p.role === 'roof' && p.shape?.kind === 'slope')).toBe(true)
   })
 })

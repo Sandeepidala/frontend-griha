@@ -61,6 +61,17 @@ describe('estimateBoq', () => {
     expect(lineOf(e, 'room-living', 'window')?.quantity).toBeGreaterThan(0)
   })
 
+  it('prices what a house style adds, and puts a tiled roof in place of the top terrace waterproofing', () => {
+    const modern = estimate()
+    const kerala = estimate({ brief: { ...DEFAULT_BRIEF, city: null, style: 'kerala' } })
+    expect(modern.sections.some((s) => s.id === 'style')).toBe(false)
+    const style = kerala.sections.find((s) => s.id === 'style')!
+    expect(style.title).toBe('House style: Kerala')
+    expect(lineOf(kerala, 'style', 'tileRoof')!.quantity).toBeGreaterThan(400)
+    expect(lineOf(kerala, 'walls', 'roofWaterproofing')).toBeUndefined()
+    expect(kerala.total).toBeGreaterThan(modern.total)
+  })
+
   it('builds the building-level sections', () => {
     const e = estimate()
     expect(e.sections.filter((s) => s.kind === 'building').map((s) => s.id)).toEqual(['foundation', 'structure', 'walls', 'services'])

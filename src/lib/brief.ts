@@ -18,6 +18,7 @@ export const DEFAULT_BRIEF: ProjectBrief = {
   familyType: 'nuclear',
   needsGroundFloorBedroom: false,
   style: 'modern',
+  palette: null,
   vastu: true,
 }
 
@@ -52,7 +53,7 @@ export const STYLE_OPTIONS: { value: DesignStyle; label: string; group: 'General
   { value: 'traditional', label: 'Traditional', group: 'General' },
   { value: 'kerala', label: 'Kerala', group: 'Regional' },
   { value: 'rajasthani', label: 'Rajasthani', group: 'Regional' },
-  { value: 'punjabi', label: 'Punjabi', group: 'Regional' },
+  { value: 'punjabi', label: 'Punjabi kothi', group: 'Regional' },
   { value: 'south_indian', label: 'South Indian', group: 'Regional' },
 ]
 

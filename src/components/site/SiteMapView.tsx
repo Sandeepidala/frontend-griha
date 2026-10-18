@@ -9,6 +9,7 @@ import { type FloorModel, buildBuildingModel, wallRect } from '@/lib/drawings/ge
 import { type MapConfig, getMapConfig } from '@/lib/geo/api'
 import { planRectToRing } from '@/lib/geo/plot'
 import { useDesignStore } from '@/stores/useDesignStore'
+import { lookFor } from '@/lib/style/kits'
 import { useActiveProject, useProjectsStore } from '@/stores/useProjectsStore'
 import type { SiteLocation } from '@/types/project'
 
@@ -98,6 +99,7 @@ export function SiteMapView() {
   const [basemap, setBasemap] = useState<Basemap>('satellite')
   const [mode, setMode] = useState<'plan' | '3d'>('plan')
   const models = useMemo(() => buildBuildingModel(floors, plot), [floors, plot])
+  const look = useMemo(() => lookFor(project?.brief), [project?.brief])
   const placed = site?.origin ? (site as Placed) : null
 
   useEffect(() => {
@@ -194,7 +196,7 @@ export function SiteMapView() {
           </div>
         ) : config ? (
           <Suspense fallback={<div className="flex h-full items-center justify-center text-sm text-text-muted">Loading 3D view…</div>}>
-            <Site3DView site={placed} models={models} config={config} />
+            <Site3DView site={placed} models={models} config={config} plot={plot} look={look} />
           </Suspense>
         ) : (
           <p className="flex h-full items-center justify-center p-6 text-sm text-text-muted">{error ?? 'Loading 3D view…'}</p>

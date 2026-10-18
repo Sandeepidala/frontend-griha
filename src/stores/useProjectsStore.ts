@@ -2,6 +2,8 @@ import { create } from 'zustand'
 import { ApiError } from '@/lib/apiClient'
 import * as projectsApi from '@/lib/projectsApi'
 import type { ActivityLogEntry, NewProjectInput, ProjectBriefUpdate, ProjectSummary } from '@/types/project'
+import type { DesignStyle } from '@/types/brief'
+import { toast } from '@/stores/useToastStore'
 
 /** The brief wizard either starts a new project or edits an existing project's brief. */
 /** An edit opens on the Review step, or straight on `startAt` (e.g. to mark the plot on the map). */
@@ -18,6 +20,8 @@ interface ProjectsState {
   fetchProjects: () => Promise<void>
   createProject: (input: NewProjectInput) => Promise<ProjectSummary>
   updateProjectBrief: (projectId: string, input: ProjectBriefUpdate) => Promise<ProjectSummary>
+  /** Changes the house style and colour scheme at once on screen, then saves it (and puts it back if that fails). */
+  setProjectStyle: (projectId: string, style: DesignStyle, palette: string | null) => Promise<boolean>
   setActiveProject: (id: string) => void
   openBriefEditor: (projectId: string, startAt?: 'location') => void
   closeBriefPanel: () => void
@@ -63,6 +67,25 @@ export const useProjectsStore = create<ProjectsState>((set, get) => ({
     const project = await projectsApi.updateProjectBrief(projectId, input)
     set((state) => ({ projects: state.projects.map((p) => (p.id === projectId ? project : p)) }))
     return project
+  },
+
+  setProjectStyle: async (projectId, style, palette) => {
+    const before = get().projects.find((p) => p.id === projectId)
+    if (!before) return false
+    const restyled = { ...before, brief: { ...before.brief, style, palette } }
+    set((state) => ({ projects: state.projects.map((p) => (p.id === projectId ? restyled : p)) }))
+    try {
+      const saved = await projectsApi.updateProjectBrief(projectId, restyled)
+      // A quicker second change may have been made meanwhile; only the latest is kept on screen.
+      set((state) => ({
+        projects: state.projects.map((p) => (p.id === projectId && p.brief.style === style && p.brief.palette === palette ? saved : p)),
+      }))
+      return true
+    } catch {
+      set((state) => ({ projects: state.projects.map((p) => (p.id === projectId && p.brief.style === style && p.brief.palette === palette ? before : p)) }))
+      toast.danger("Couldn't save the house style. Check your connection and try again.")
+      return false
+    }
   },
 
   setActiveProject: (id) => set({ activeProjectId: id }),

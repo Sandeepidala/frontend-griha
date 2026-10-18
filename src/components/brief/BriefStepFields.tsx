@@ -8,6 +8,7 @@ import { SegmentedControl } from '@/components/ui/SegmentedControl'
 import { Select } from '@/components/ui/Select'
 import { Switch } from '@/components/ui/Switch'
 import { Textarea } from '@/components/ui/Textarea'
+import { StyleChooser } from '@/components/style/StyleChooser'
 import { FormField } from '@/components/widgets/FormField'
 import {
   BRIEF_LIMITS,
@@ -16,11 +17,10 @@ import {
   INDIAN_STATES,
   KITCHEN_OPTIONS,
   PLOT_SHAPE_OPTIONS,
-  STYLE_OPTIONS,
   floorsLabel,
 } from '@/lib/brief'
 import { formatCurrency } from '@/lib/format'
-import type { ProjectBrief } from '@/types/brief'
+import { lookFor } from '@/lib/style/kits'
 import type { Plot } from '@/types/design'
 import {
   BUDGET_STEP,
@@ -91,7 +91,8 @@ interface BriefStepFieldsProps {
 /** The current step's fields of the project brief. */
 export function BriefStepFields({ wizard, mapTarget, hideLocationIntro }: BriefStepFieldsProps) {
   const { form, brief, step, setField, setBrief, setSite, goTo } = wizard
-  const styleLabel = STYLE_OPTIONS.find((o) => o.value === brief.style)?.label ?? brief.style
+  const look = lookFor(brief)
+  const styleLabel = `${look.kit.name} · ${look.palette.name}`
   const extraRoomsLabel = brief.extraRooms.map((r) => EXTRA_ROOM_OPTIONS.find((o) => o.value === r)?.label ?? r).join(', ') || 'None'
   const abroad = !!form.site?.countryCode && form.site.countryCode !== 'IN'
 
@@ -286,18 +287,8 @@ export function BriefStepFields({ wizard, mapTarget, hideLocationIntro }: BriefS
 
       {step === STYLE_STEP && (
         <>
-          <FormField label="Style">
-            <Select value={brief.style} onChange={(event) => setBrief({ style: event.target.value as ProjectBrief['style'] })}>
-              {(['General', 'Regional'] as const).map((group) => (
-                <optgroup key={group} label={group}>
-                  {STYLE_OPTIONS.filter((o) => o.group === group).map((o) => (
-                    <option key={o.value} value={o.value}>
-                      {o.label}
-                    </option>
-                  ))}
-                </optgroup>
-              ))}
-            </Select>
+          <FormField label="House style" hint="You can change it any time; the 3D model and estimate follow it">
+            <StyleChooser brief={brief} onChange={(patch) => setBrief(patch)} />
           </FormField>
           <div className="flex items-center justify-between gap-4 rounded-md border border-border bg-surface-2 px-4 py-3">
             <div>

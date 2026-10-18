@@ -19,7 +19,9 @@ import {
   unionRect,
   wallCenterOffset,
 } from '@/lib/drawings/geometry'
+import { type Facade, type FacadeSolid, buildFacade } from '@/lib/drawings/facade'
 import type { DrawingSet } from '@/lib/drawings/sheets'
+import { lookFor } from '@/lib/style/kits'
 import { INK, SheetFrame, Stack, legendBlock, notesBlock, tableBlock } from '../SheetFrame'
 import { DimChain, Label, LevelMark, PlanBase, PlanDimensions, SectionMarker, Tag } from '../symbols'
 import { type SheetProps, padBounds, sheetFloor, sheetMeta, swatch } from './common'
@@ -327,34 +329,62 @@ function faceMapper(side: Side, set: DrawingSet) {
   }
 }
 
-function elevationExtent(set: DrawingSet, side: Side) {
-  const map = faceMapper(side, set)
-  const ranges = set.models.filter((m) => m.footprint).map((m) => map.range(m.footprint!))
-  const u0 = Math.min(...ranges.map((r) => r[0]))
-  const u1 = Math.max(...ranges.map((r) => r[1]))
-  const top = Math.max(...set.models.map((m) => m.floor.elevation + m.height)) + PARAPET_HEIGHT
-  return { u0, u1, top }
+/** The house in its style, with heights from finished floor level (the plinth below zero). */
+function elevationFacade(set: DrawingSet): Facade {
+  const facade = buildFacade(set.models, set.plot, lookFor(set.brief))
+  return { ...facade, solids: facade.solids.map((s) => ({ ...s, z0: s.z0 - PLINTH_HEIGHT, z1: s.z1 - PLINTH_HEIGHT })), top: facade.top - PLINTH_HEIGHT }
 }
 
-function Elevation({ set, side, mm, ox, oy }: { set: DrawingSet; side: Side; mm: Mm; ox: number; oy: number }) {
+function elevationExtent(set: DrawingSet, side: Side, facade: Facade) {
   const map = faceMapper(side, set)
-  const { u0, u1, top } = elevationExtent(set, side)
+  const ranges = [...set.models.filter((m) => m.footprint).map((m) => map.range(m.footprint!)), ...facade.solids.map((s) => map.range(s.rect))]
+  const u0 = Math.min(...ranges.map((r) => r[0]))
+  const u1 = Math.max(...ranges.map((r) => r[1]))
+  return { u0, u1, top: Math.max(facade.top, ...set.models.map((m) => m.floor.elevation + m.height)) }
+}
+
+/** The outline of a solid seen from one side: a slope's top edge narrows to its inset, a dome is an arch. */
+function solidOutline(solid: FacadeSolid, map: ReturnType<typeof faceMapper>, X: (u: number) => number, Y: (z: number) => number) {
+  const [a, b] = map.range(solid.rect)
+  const shape = solid.shape
+  if (shape?.kind === 'dome') {
+    const rx = (b - a) / 2
+    return `M ${X(a)} ${Y(solid.z0)} A ${rx} ${solid.z1 - solid.z0} 0 0 1 ${X(b)} ${Y(solid.z0)} Z`
+  }
+  let [ta, tb] = [a, b]
+  if (shape?.kind === 'slope') {
+    const r = solid.rect
+    const top = { x: r.x + shape.inset.w, y: r.y + shape.inset.n, width: Math.max(0, r.width - shape.inset.w - shape.inset.e), height: Math.max(0, r.height - shape.inset.n - shape.inset.s) }
+    ;[ta, tb] = map.range(top)
+  }
+  return `M ${X(a)} ${Y(solid.z0)} L ${X(b)} ${Y(solid.z0)} L ${X(tb)} ${Y(solid.z1)} L ${X(ta)} ${Y(solid.z1)} Z`
+}
+
+const ELEVATION_FILL: Partial<Record<NonNullable<FacadeSolid['role']>, string>> = {
+  roof: 'url(#hatch-paving)',
+  railing: INK.coldSoft,
+  coping: INK.tint,
+  fascia: INK.tint,
+  cladding: 'url(#hatch-concrete)',
+}
+
+function Elevation({ set, side, facade, mm, ox, oy }: { set: DrawingSet; side: Side; facade: Facade; mm: Mm; ox: number; oy: number }) {
+  const map = faceMapper(side, set)
+  const { u0, u1, top } = elevationExtent(set, side, facade)
   const X = (u: number) => ox + (u - u0)
   const Y = (z: number) => oy - z
   const parts: ReactNode[] = []
+  const kit = lookFor(set.brief).kit
 
-  set.models.forEach((m, i) => {
+  set.models.forEach((m) => {
     if (!m.footprint) return
     const [a, b] = map.range(m.footprint)
     const z0 = m.floor.elevation
     const z1 = z0 + m.height
-    const isTop = i === set.models.length - 1
     parts.push(
       <g key={`f${m.floor.id}`}>
         <rect x={X(a)} y={Y(z1)} width={b - a} height={z1 - z0} fill={INK.paper} stroke={INK.line} strokeWidth={mm(0.35)} />
         <rect x={X(a) - 0.25} y={Y(z1)} width={b - a + 0.5} height={SLAB_THICKNESS + 0.35} fill={INK.tint} stroke={INK.line} strokeWidth={mm(0.2)} />
-        <rect x={X(a)} y={Y(z1 + PARAPET_HEIGHT)} width={b - a} height={PARAPET_HEIGHT} fill={isTop ? INK.paper : INK.paper} stroke={INK.line} strokeWidth={mm(0.3)} />
-        <line x1={X(a)} x2={X(b)} y1={Y(z1 + PARAPET_HEIGHT - 0.35)} y2={Y(z1 + PARAPET_HEIGHT - 0.35)} stroke={INK.line} strokeWidth={mm(0.15)} />
       </g>,
     )
     for (const o of m.openings.filter((op) => op.wall.exterior && op.wall.outside === side)) {
@@ -363,23 +393,21 @@ function Elevation({ set, side, mm, ox, oy }: { set: DrawingSet; side: Side; mm:
       const w = o.width
       if (o.kind === 'door' || o.kind === 'main-door') {
         parts.push(
-          <g key={o.id}>
+          <g key={`${m.floor.id}-${o.id}`}>
             <rect x={x} y={Y(z0 + o.height)} width={w} height={o.height} fill={INK.paving} stroke={INK.line} strokeWidth={mm(0.3)} />
             <rect x={x + w * 0.15} y={Y(z0 + o.height - 0.8)} width={w * 0.7} height={o.height * 0.35} fill="none" stroke={INK.mid} strokeWidth={mm(0.15)} />
             <rect x={x + w * 0.15} y={Y(z0 + o.height * 0.5)} width={w * 0.7} height={o.height * 0.38} fill="none" stroke={INK.mid} strokeWidth={mm(0.15)} />
-            <rect x={x - 0.6} y={Y(z0 + o.height + 0.5)} width={w + 1.2} height={0.5} fill={INK.tint} stroke={INK.line} strokeWidth={mm(0.15)} />
           </g>,
         )
       } else {
         const zs = z0 + o.sill
         parts.push(
-          <g key={o.id}>
+          <g key={`${m.floor.id}-${o.id}`}>
             <rect x={x} y={Y(zs + o.height)} width={w} height={o.height} fill={INK.coldSoft} stroke={INK.line} strokeWidth={mm(0.3)} />
             <line x1={x + w / 2} x2={x + w / 2} y1={Y(zs + o.height)} y2={Y(zs)} stroke={INK.line} strokeWidth={mm(0.15)} />
             {o.kind === 'window' && (
               <>
                 <line x1={x} x2={x + w} y1={Y(zs + o.height * 0.7)} y2={Y(zs + o.height * 0.7)} stroke={INK.line} strokeWidth={mm(0.12)} />
-                <rect x={x - 0.4} y={Y(zs + o.height + 0.35)} width={w + 0.8} height={0.35} fill={INK.tint} stroke={INK.line} strokeWidth={mm(0.15)} />
                 <rect x={x - 0.25} y={Y(zs)} width={w + 0.5} height={0.2} fill={INK.line} />
               </>
             )}
@@ -389,36 +417,86 @@ function Elevation({ set, side, mm, ox, oy }: { set: DrawingSet; side: Side; mm:
     }
   })
 
+  // The style's roof, parapet and details: everything on or past this face, round the sides, or on the
+  // roof, drawn back to front so nearer pieces cover those behind them.
+  const out = OUTWARD[side]
+  const faces = set.models.filter((m) => m.footprint).map((m) => m.footprint!)
+  const face =
+    side === 'N'
+      ? Math.min(...faces.map((f) => f.y))
+      : side === 'S'
+        ? Math.max(...faces.map((f) => f.y + f.height))
+        : side === 'W'
+          ? Math.min(...faces.map((f) => f.x))
+          : Math.max(...faces.map((f) => f.x + f.width))
+  const fu0 = Math.min(...faces.map((f) => map.range(f)[0]))
+  const fu1 = Math.max(...faces.map((f) => map.range(f)[1]))
+  const roofLevel = Math.max(...set.models.map((m) => m.floor.elevation + m.height))
+  const near = (s: FacadeSolid) => (out.x !== 0 ? out.x * (s.rect.x + s.rect.width / 2) : out.y * (s.rect.y + s.rect.height / 2))
+  const visible = facade.solids.filter((s) => {
+    if (s.stage !== 'top' && s.stage !== 'details') return false
+    if (s.role === 'sill') return false
+    if (s.stage === 'top' || s.z0 >= roofLevel - 0.1) return true
+    const [a, b] = map.range(s.rect)
+    if (a < fu0 - 0.05 || b > fu1 + 0.05) return true
+    const nearEdge = side === 'N' ? s.rect.y : side === 'S' ? s.rect.y + s.rect.height : side === 'W' ? s.rect.x : s.rect.x + s.rect.width
+    return side === 'N' || side === 'W' ? nearEdge <= face + 0.05 : nearEdge >= face - 0.05
+  })
+  visible
+    .sort((p, q) => near(p) - near(q))
+    .forEach((solid, i) => {
+      const fill = solid.opacity ? INK.coldSoft : (ELEVATION_FILL[solid.role ?? 'wall'] ?? (solid.shape?.kind === 'slope' ? 'url(#hatch-paving)' : INK.paper))
+      parts.push(<path key={`s${i}`} d={solidOutline(solid, map, X, Y)} fill={fill} stroke={INK.line} strokeWidth={mm(0.25)} strokeLinejoin="round" />)
+    })
+
   const levels = set.models.map((m) => ({ z: m.floor.elevation, name: `${m.floor.name} FFL` }))
   const last = set.models[set.models.length - 1]
-  if (last) levels.push({ z: last.floor.elevation + last.height, name: 'Terrace' })
-  const face = FACES.find((f) => f.side === side)!
+  if (last) levels.push({ z: last.floor.elevation + last.height, name: kit.roof === 'hip' ? 'Top of slab' : 'Terrace' })
+  const faceName = FACES.find((f) => f.side === side)!
 
   return (
     <g>
       <rect x={X(u0) - 4} y={Y(-PLINTH_HEIGHT)} width={u1 - u0 + 8} height={1.2} fill="url(#hatch-earth)" />
-      <rect x={X(u0) - 0.3} y={Y(0)} width={u1 - u0 + 0.6} height={PLINTH_HEIGHT} fill={INK.tint} stroke={INK.line} strokeWidth={mm(0.3)} />
       {parts}
       <line x1={X(u0) - 4} x2={X(u1) + 4} y1={Y(-PLINTH_HEIGHT)} y2={Y(-PLINTH_HEIGHT)} stroke={INK.line} strokeWidth={mm(0.6)} />
       {levels.map((l) => (
         <LevelMark key={l.name} x={X(u1) + 1.5} y={Y(l.z)} label={formatLevel(l.z)} name={l.name} mm={mm} />
       ))}
-      <LevelMark x={X(u1) + 1.5} y={Y(top)} label={formatLevel(top)} name="Top of parapet" mm={mm} />
-      <Label x={X((u0 + u1) / 2)} y={Y(-PLINTH_HEIGHT) + mm(7)} text={`${face.name.toUpperCase()} ELEVATION${side === frontSide(set.plot) ? ' (FRONT)' : ''}`} mm={mm} size={3} weight={700} color={INK.line} />
+      <LevelMark x={X(u1) + 1.5} y={Y(top)} label={formatLevel(top)} name={kit.roof === 'hip' ? 'Roof ridge' : 'Top of parapet'} mm={mm} />
+      <Label x={X((u0 + u1) / 2)} y={Y(-PLINTH_HEIGHT) + mm(7)} text={`${faceName.name.toUpperCase()} ELEVATION${side === frontSide(set.plot) ? ' (FRONT)' : ''}`} mm={mm} size={3} weight={700} color={INK.line} />
       <line x1={X((u0 + u1) / 2) - mm(22)} x2={X((u0 + u1) / 2) + mm(22)} y1={Y(-PLINTH_HEIGHT) + mm(8.2)} y2={Y(-PLINTH_HEIGHT) + mm(8.2)} stroke={INK.line} strokeWidth={mm(0.3)} />
     </g>
   )
 }
 
+/** The elevation sheet's materials legend, for the house's style. */
+function styleMaterials(set: DrawingSet, facade: Facade) {
+  const { kit } = lookFor(set.brief)
+  const has = (key: string) => facade.takeoff.some((t) => t.key === key)
+  const cladding = has('woodCladding') ? 'Wood-finish cladding' : has('brickCladding') ? 'Brick-tile cladding' : has('stoneCladding') ? 'Sandstone cladding' : null
+  return [
+    { label: 'Exterior plaster + weatherproof paint', symbol: swatch.fill(INK.paper) },
+    { label: 'Glazing (UPVC frame)', symbol: swatch.fill(INK.coldSoft) },
+    { label: 'Chajja / slab band', symbol: swatch.fill(INK.tint) },
+    ...(kit.roof === 'hip' || has('tiledShade') ? [{ label: 'Mangalore clay tiles', symbol: swatch.pattern('hatch-paving') }] : []),
+    ...(cladding ? [{ label: cladding, symbol: swatch.pattern('hatch-concrete') }] : []),
+    { label: 'Main door (teak)', symbol: swatch.fill(INK.paving) },
+    { label: 'Natural ground', symbol: swatch.pattern('hatch-earth') },
+  ]
+}
+
 export function ElevationsSheet(props: SheetProps) {
   const { set, sheet } = props
-  const extents = FACES.map((f) => ({ ...f, ...elevationExtent(set, f.side) }))
+  const facade = elevationFacade(set)
+  const { kit } = lookFor(set.brief)
+  const extents = FACES.map((f) => ({ ...f, ...elevationExtent(set, f.side, facade) }))
   const cellW = Math.max(...extents.map((e) => e.u1 - e.u0)) + 30
   const cellH = Math.max(...extents.map((e) => e.top)) + PLINTH_HEIGHT + 16
   const front = frontSide(set.plot)
   // Front elevation first.
   const ordered = [...extents].sort((a, b) => (a.side === front ? -1 : b.side === front ? 1 : 0))
   const bounds = { x: -4, y: -4, width: cellW * 2 + 4, height: cellH * 2 + 4 }
+  const pitch = Math.round((Math.atan(kit.pitch) * 180) / Math.PI)
   return (
     <SheetFrame
       meta={sheetMeta(set, sheet)}
@@ -427,18 +505,18 @@ export function ElevationsSheet(props: SheetProps) {
         <Stack
           box={box}
           blocks={[
-            legendBlock('Materials', [
-              { label: 'Exterior plaster + weatherproof paint', symbol: swatch.fill(INK.paper) },
-              { label: 'Glazing (UPVC frame)', symbol: swatch.fill(INK.coldSoft) },
-              { label: 'Chajja / slab band', symbol: swatch.fill(INK.tint) },
-              { label: 'Main door (teak)', symbol: swatch.fill(INK.paving) },
-              { label: 'Natural ground', symbol: swatch.pattern('hatch-earth') },
-            ]),
-            notesBlock('Notes', [
-              `Front (${set.plot.facing}) elevation shown first; all levels relative to FFL ±0'-0" = plinth ${formatFeet(PLINTH_HEIGHT)} above ground.`,
-              '1\'-6" RCC chajjas over all windows; 2\'-0" over doors.',
-              'Parapet 3\'-6" high with coping, top of parapet level as marked.',
-            ], 44),
+            legendBlock('Materials', styleMaterials(set, facade)),
+            notesBlock(
+              'Notes',
+              [
+                `Front (${set.plot.facing}) elevation shown first; all levels relative to FFL ±0'-0" = plinth ${formatFeet(PLINTH_HEIGHT)} above ground.`,
+                `${kit.name} style: ${kit.features.join('; ').toLowerCase()}.`,
+                kit.roof === 'hip'
+                  ? `Hip roof in Mangalore clay tiles, about ${pitch}° pitch, with ${formatFeet(kit.eaves)} eaves all round.`
+                  : 'Parapet with coping round the terrace; top of parapet level as marked.',
+              ],
+              44,
+            ),
           ]}
         />
       )}
@@ -450,7 +528,7 @@ export function ElevationsSheet(props: SheetProps) {
             const row = Math.floor(i / 2)
             const ox = col * cellW + 6
             const oy = row * cellH + cellH - PLINTH_HEIGHT - 12
-            return <Elevation key={e.side} set={set} side={e.side} mm={mm} ox={ox} oy={oy} />
+            return <Elevation key={e.side} set={set} side={e.side} facade={facade} mm={mm} ox={ox} oy={oy} />
           })}
         </g>
       )}

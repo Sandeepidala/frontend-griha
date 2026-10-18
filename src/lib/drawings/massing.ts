@@ -15,16 +15,60 @@ export const MASSING_COLORS = {
   parapetCap: '#cfc7bb',
 }
 
+/** What a piece of the building is, so the build sequence, the estimate and the drawings can tell parts apart. */
+export type SolidRole =
+  | 'plinth'
+  | 'wall'
+  | 'wall-interior'
+  | 'glass'
+  | 'door'
+  | 'sill'
+  | 'slab'
+  | 'band'
+  | 'parapet'
+  | 'coping'
+  | 'railing'
+  | 'roof'
+  | 'fascia'
+  | 'shade'
+  | 'porch'
+  | 'pillar'
+  | 'cladding'
+  | 'jharokha'
+  | 'pergola'
+  | 'dome'
+
+/**
+ * A box fills its rect. A slope runs from its rect at z0 up to the rect inset by `inset` at z1: a hip
+ * roof (inset to a ridge line), a gable, a lean-to sunshade (inset fully on its outer side), a pyramid.
+ * A cylinder and a dome stand inside the rect.
+ */
+export type Shape =
+  | { kind: 'box' }
+  | { kind: 'slope'; inset: { n: number; s: number; e: number; w: number } }
+  | { kind: 'cylinder' }
+  | { kind: 'dome' }
+
 export interface Box {
   rect: Rect
   z0: number
   z1: number
   color: string
   opacity?: number
+  role?: SolidRole
+  /** A box when absent. */
+  shape?: Shape
 }
 
 /** Splits a wall into solid pieces around its openings, plus glass/door panels in the holes. */
-export function wallBoxes(wall: WallSegment, openings: PlanOpening[], height: number, color: string): Box[] {
+export function wallBoxes(
+  wall: WallSegment,
+  openings: PlanOpening[],
+  height: number,
+  color: string,
+  role: SolidRole = wall.exterior ? 'wall' : 'wall-interior',
+  panels: { glass?: string; door?: string } = {},
+): Box[] {
   const r = wallRect(wall)
   const horizontal = wall.orientation === 'h'
   const start = horizontal ? r.x : r.y
@@ -42,15 +86,15 @@ export function wallBoxes(wall: WallSegment, openings: PlanOpening[], height: nu
   for (const o of own) {
     const a0 = Math.max(cursor, o.center - o.width / 2)
     const a1 = o.center + o.width / 2
-    if (a0 > cursor + 0.01) out.push({ rect: piece(cursor, a0), z0: 0, z1: height, color })
+    if (a0 > cursor + 0.01) out.push({ rect: piece(cursor, a0), z0: 0, z1: height, color, role })
     const top = Math.min(height, o.sill + o.height)
-    if (o.sill > 0) out.push({ rect: piece(a0, a1), z0: 0, z1: o.sill, color })
-    if (top < height) out.push({ rect: piece(a0, a1), z0: top, z1: height, color })
-    if (!isDoor(o)) out.push({ rect: thin(a0, a1), z0: o.sill, z1: top, color: MASSING_COLORS.glass, opacity: 0.55 })
-    else if (o.kind === 'main-door') out.push({ rect: thin(a0, a1), z0: 0, z1: top, color: MASSING_COLORS.door })
+    if (o.sill > 0) out.push({ rect: piece(a0, a1), z0: 0, z1: o.sill, color, role })
+    if (top < height) out.push({ rect: piece(a0, a1), z0: top, z1: height, color, role })
+    if (!isDoor(o)) out.push({ rect: thin(a0, a1), z0: o.sill, z1: top, color: panels.glass ?? MASSING_COLORS.glass, opacity: 0.55, role: 'glass' })
+    else if (o.kind === 'main-door') out.push({ rect: thin(a0, a1), z0: 0, z1: top, color: panels.door ?? MASSING_COLORS.door, role: 'door' })
     cursor = a1
   }
-  if (end > cursor + 0.01) out.push({ rect: piece(cursor, end), z0: 0, z1: height, color })
+  if (end > cursor + 0.01) out.push({ rect: piece(cursor, end), z0: 0, z1: height, color, role })
   return out
 }
 

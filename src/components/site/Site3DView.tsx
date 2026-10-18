@@ -4,12 +4,15 @@ import { Button } from '@/components/ui/Button'
 import { SegmentedControl } from '@/components/ui/SegmentedControl'
 import { Switch } from '@/components/ui/Switch'
 import { ApiError } from '@/lib/apiError'
-import { type FloorModel, PARAPET_HEIGHT, PLINTH_HEIGHT } from '@/lib/drawings/geometry'
-import { buildingBoxes } from '@/lib/drawings/massing'
+import { buildFacade } from '@/lib/drawings/facade'
+import { type FloorModel, PLINTH_HEIGHT, type Rect } from '@/lib/drawings/geometry'
+import type { Box } from '@/lib/drawings/massing'
+import type { Look } from '@/lib/style/kits'
 import { type MapConfig, type NeighbourBuilding, fetchBuildings } from '@/lib/geo/api'
 import { GeoJSONSource, Map as MapLibre, NavigationControl, type StyleSpecification } from '@/lib/geo/maplibre'
 import { type LatLng, fromLocal, planRectToRing, planToLatLng, toLocal } from '@/lib/geo/plot'
 import { dayOfYear, shadowOf, sunPosition, utcOffsetFor } from '@/lib/geo/sun'
+import type { Plot } from '@/types/design'
 import type { SiteLocation } from '@/types/project'
 
 const FT = 0.3048
@@ -92,6 +95,29 @@ interface Site3DViewProps {
   site: Placed
   models: FloorModel[]
   config: MapConfig
+  plot: Plot
+  /** The project's house style and colours. */
+  look: Look
+}
+
+/**
+ * Map extrusions are upright prisms, so a sloped roof becomes a few stacked steps that narrow as they
+ * rise, and a dome shrinking steps; from the map's distance they read as the real shapes.
+ */
+function extrusionBlocks(solid: Box): Box[] {
+  const { shape } = solid
+  if (shape?.kind !== 'slope' && shape?.kind !== 'dome') return [solid]
+  const steps = shape.kind === 'slope' ? 4 : 3
+  const h = solid.z1 - solid.z0
+  const out: Box[] = []
+  for (let k = 0; k < steps; k++) {
+    const f = shape.kind === 'slope' ? k / steps : 1 - Math.cos(((k + 1) / steps) * (Math.PI / 2)) * 0.9
+    const inset = shape.kind === 'slope' ? { n: shape.inset.n * f, s: shape.inset.s * f, e: shape.inset.e * f, w: shape.inset.w * f } : { n: (solid.rect.height / 2) * f, s: (solid.rect.height / 2) * f, e: (solid.rect.width / 2) * f, w: (solid.rect.width / 2) * f }
+    const rect: Rect = { x: solid.rect.x + inset.w, y: solid.rect.y + inset.n, width: solid.rect.width - inset.w - inset.e, height: solid.rect.height - inset.n - inset.s }
+    if (rect.width < 0.05 || rect.height < 0.05) break
+    out.push({ ...solid, rect, z0: solid.z0 + (h * k) / steps, z1: solid.z0 + (h * (k + 1)) / steps, shape: undefined })
+  }
+  return out
 }
 
 /**
@@ -99,7 +125,7 @@ interface Site3DViewProps {
  * true position and turn, neighbouring buildings from OpenStreetMap, optional terrain, and a sun study
  * with ground shadows for any season and time of day.
  */
-export function Site3DView({ site, models, config }: Site3DViewProps) {
+export function Site3DView({ site, models, config, plot, look }: Site3DViewProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<MapLibre | null>(null)
   const [loaded, setLoaded] = useState(false)
@@ -115,12 +141,13 @@ export function Site3DView({ site, models, config }: Site3DViewProps) {
   const frame = useMemo(() => ({ origin: site.origin, rotationDeg: site.rotationDeg ?? 0 }), [site.origin, site.rotationDeg])
   const boundaryRing = useMemo<Ring | null>(() => (site.boundary ? [...site.boundary.map((c) => [c.lng, c.lat] as [number, number]), [site.boundary[0].lng, site.boundary[0].lat]] : null), [site.boundary])
 
+  const facade = useMemo(() => buildFacade(models, plot, look), [models, plot, look])
   const house = useMemo(
     () =>
-      buildingBoxes(models).map((box) =>
+      facade.solids.flatMap(extrusionBlocks).map((box) =>
         polygon(planRectToRing(frame, box.rect), { base: box.z0 * FT, height: box.z1 * FT, color: box.color, glass: Boolean(box.opacity) }),
       ),
-    [models, frame],
+    [facade, frame],
   )
   // Neighbours standing on the plot itself are what the new house replaces.
   const around = useMemo(
@@ -154,7 +181,8 @@ export function Site3DView({ site, models, config }: Site3DViewProps) {
     // Each floor's outline at its roof (parapet on the top floor), lifted on the plinth.
     models.forEach((model, i) => {
       if (!model.footprint) return
-      const top = (model.floor.elevation + model.height + PLINTH_HEIGHT + (i === models.length - 1 ? PARAPET_HEIGHT : 0)) * FT
+      // The top floor's shadow comes from the highest point of its roof or parapet.
+      const top = (i === models.length - 1 ? facade.top : model.floor.elevation + model.height + PLINTH_HEIGHT) * FT
       const ring = planRectToRing(frame, model.footprint).slice(0, 4).map(([lng, lat]) => local(lng, lat))
       const shadow = shadowOf(ring, top, sun)
       if (shadow) features.push(polygon(back(shadow)))
@@ -169,7 +197,7 @@ export function Site3DView({ site, models, config }: Site3DViewProps) {
     return features
     // The sun is fully described by these numbers.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [shadows, showNeighbours, around, models, frame, site.origin, sun.azimuth, sun.altitude])
+  }, [shadows, showNeighbours, around, models, facade.top, frame, site.origin, sun.azimuth, sun.altitude])
 
   useEffect(() => {
     let current = true

@@ -1,9 +1,15 @@
+import { useMemo } from 'react'
 import { ContactShadows, OrbitControls } from '@react-three/drei'
 import { Canvas } from '@react-three/fiber'
+import { HouseLights } from '@/components/three/HouseLights'
+import { SolidMesh } from '@/components/three/SolidMesh'
+import * as THREE from 'three'
+import { buildFacade } from '@/lib/drawings/facade'
 import { type FloorModel, type Rect, OUTWARD, PLINTH_HEIGHT, frontSide } from '@/lib/drawings/geometry'
 import type { ItemKind, PlacedItem } from '@/lib/drawings/interior'
 import { type Box, MASSING_COLORS, floorShellBoxes } from '@/lib/drawings/massing'
 import type { DrawingSet } from '@/lib/drawings/sheets'
+import { lookFor } from '@/lib/style/kits'
 import { compoundWallRects, landscapeLayout, siteContext } from '@/lib/drawings/site'
 import type { FloorFinish } from '@/types/design'
 
@@ -92,23 +98,32 @@ function FloorShell({ model, plot, base, isTop, interior }: { model: FloorModel;
   )
 }
 
-function Building({ set, interiorFloorId }: { set: DrawingSet; interiorFloorId?: string }) {
-  const floors = interiorFloorId ? set.models.filter((m) => m.floor.id === interiorFloorId) : set.models
-  const ground = set.models[0]
+/** One floor's walls with its rooms' floors, for looking inside. */
+function InteriorFloor({ set, floorId }: { set: DrawingSet; floorId: string }) {
+  const model = set.models.find((m) => m.floor.id === floorId)
+  return model ? <FloorShell model={model} plot={set.plot} base={0} isTop={false} interior /> : null
+}
+
+/** The whole house from outside, built up in the project's style (lib/drawings/facade). */
+function Building({ set }: { set: DrawingSet }) {
+  const facade = useMemo(() => buildFacade(set.models, set.plot, lookFor(set.brief)), [set])
   return (
     <group>
-      {!interiorFloorId && ground?.footprint && (
-        <BoxMesh box={{ rect: ground.footprint, z0: -PLINTH_HEIGHT, z1: 0, color: COLORS.plinth }} base={0} plot={set.plot} />
+      {set.models.map((m) =>
+        m.rooms.map((room) => (
+          <mesh
+            key={room.id}
+            rotation={[-Math.PI / 2, 0, 0]}
+            position={[room.x + room.width / 2 - set.plot.width / 2, m.floor.elevation + 0.03, room.y + room.height / 2 - set.plot.height / 2]}
+            receiveShadow
+          >
+            <planeGeometry args={[room.width, room.height]} />
+            <meshStandardMaterial color={FINISH[room.room.floorFinish]} />
+          </mesh>
+        )),
       )}
-      {floors.map((m, i) => (
-        <FloorShell
-          key={m.floor.id}
-          model={m}
-          plot={set.plot}
-          base={interiorFloorId ? 0 : m.floor.elevation}
-          isTop={!interiorFloorId && i === floors.length - 1}
-          interior={!!interiorFloorId}
-        />
+      {facade.solids.map((solid, i) => (
+        <SolidMesh key={i} solid={solid} base={-PLINTH_HEIGHT} plot={set.plot} />
       ))}
     </group>
   )
@@ -195,7 +210,8 @@ function Site({ set, landscape }: { set: DrawingSet; landscape: boolean }) {
               <meshStandardMaterial color={COLORS.shrub} />
             </mesh>
           ))}
-          {layout.planters.map((p, i) => (
+          {/* Terrace planters, unless a sloped roof covers the terrace. */}
+          {lookFor(set.brief).kit.roof === 'flat' && layout.planters.map((p, i) => (
             <group key={`p${i}`}>
               <BoxMesh box={{ rect: p, z0: 0, z1: 1.5, color: COLORS.planter }} base={roofLevel} plot={plot} />
               {Array.from({ length: Math.max(1, Math.floor(p.width / 2.5)) }, (_, j) => (
@@ -230,23 +246,17 @@ export function Model3DSheet({ set, mode, floorId }: { set: DrawingSet; mode: Mo
   const targetY = mode === 'interior' ? 0 : ((top ? top.floor.elevation + top.height : 10) / 2) * 0.8
   const size = Math.max(set.plot.width, set.plot.height)
   return (
-    <Canvas shadows="percentage" gl={{ preserveDrawingBuffer: true, antialias: true }} camera={{ position: cameraFor(set, mode), fov: 40, near: 0.5, far: 2000 }}>
+    <Canvas
+      shadows="percentage"
+      // Neutral tone mapping keeps paint colours true; the default filmic curve dulls and darkens them.
+      gl={{ preserveDrawingBuffer: true, antialias: true, toneMapping: THREE.NeutralToneMapping }}
+      camera={{ position: cameraFor(set, mode), fov: 40, near: 0.5, far: 2000 }}
+    >
       <color attach="background" args={[COLORS.sky]} />
-      <hemisphereLight args={['#ffffff', '#a9b89a', 0.75]} />
-      <directionalLight
-        position={[size * 0.8, size * 1.5, size * 0.6]}
-        intensity={1.5}
-        castShadow
-        shadow-mapSize-width={2048}
-        shadow-mapSize-height={2048}
-        shadow-camera-left={-size * 1.2}
-        shadow-camera-right={size * 1.2}
-        shadow-camera-top={size * 1.2}
-        shadow-camera-bottom={-size * 1.2}
-      />
+      <HouseLights size={size} front={frontSide(set.plot)} />
       {mode === 'interior' ? (
         <group>
-          {interiorModel && <Building set={set} interiorFloorId={interiorModel.floor.id} />}
+          {interiorModel && <InteriorFloor set={set} floorId={interiorModel.floor.id} />}
           <Furniture items={items} plot={set.plot} />
           <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.05, 0]} receiveShadow>
             <planeGeometry args={[set.plot.width + 40, set.plot.height + 40]} />

@@ -8,6 +8,7 @@ import { DesignCheckPanel } from '@/components/canvas/DesignCheckPanel'
 import { GeneratePanel } from '@/components/canvas/GeneratePanel'
 import { DrawingsWorkspace } from '@/components/drawings/DrawingsWorkspace'
 import { ModelViewer3D } from '@/components/canvas/ModelViewer3D'
+import { StylePicker } from '@/components/style/StylePicker'
 import { PlanCanvas2D } from '@/components/canvas/PlanCanvas2D'
 import { ReviewPanel } from '@/components/canvas/ReviewPanel'
 import { SelectionToolbar } from '@/components/canvas/SelectionToolbar'
@@ -60,6 +61,7 @@ export function ProjectWorkspace() {
       />
       <GeneratePanel open={generateOpen} onClose={() => setGenerateOpen(false)} />
       <DesignCheckPanel open={designCheckOpen} onClose={() => setDesignCheckOpen(false)} report={designReport} />
+      <StylePicker />
       <CostEstimatePanel open={costEstimateOpen} onClose={() => setCostEstimateOpen(false)} />
       {status === 'idle' && <ReviewPanel key={id} open={reviewOpen} onClose={() => setReviewOpen(false)} onChange={setLatestReview} />}
       {status === 'idle' && viewMode !== 'drawings' && viewMode !== 'site' && <SelectionToolbar />}

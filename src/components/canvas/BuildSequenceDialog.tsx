@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Canvas } from '@react-three/fiber'
+import * as THREE from 'three'
 import { Clapperboard, Download, Pause, Play, RotateCcw, Video, X } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { IconButton } from '@/components/ui/IconButton'
@@ -299,7 +300,7 @@ export function BuildSequenceDialog({ onClose, title, projectName, plot, floors,
           <Canvas
             shadows="percentage"
             dpr={[1, 2]}
-            gl={{ preserveDrawingBuffer: true, antialias: true }}
+            gl={{ preserveDrawingBuffer: true, antialias: true, toneMapping: THREE.NeutralToneMapping }}
             camera={{ fov: 40, near: 0.5, far: 3000, position: [0, 40, 80] }}
             onCreated={({ gl }) => {
               glCanvas.current = gl.domElement
