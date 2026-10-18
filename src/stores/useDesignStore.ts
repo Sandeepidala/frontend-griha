@@ -6,7 +6,7 @@ import * as roomsApi from '@/lib/roomsApi'
 import type { FloorPlacement } from '@/lib/floorsApi'
 import type { RoomFields } from '@/lib/roomsApi'
 import { toast } from '@/stores/useToastStore'
-import type { Floor, FloorFinish, Guides, Plot, Room, SelectionRef } from '@/types/design'
+import type { Floor, FloorFinish, Guides, OpeningEdit, Plot, Room, SelectionRef } from '@/types/design'
 
 const DEFAULT_WALL_HEIGHT = 9
 const DEFAULT_FLOOR_FINISH: FloorFinish = 'tile'
@@ -85,6 +85,8 @@ interface DesignState {
   viewMode: ViewMode
   zoom: number
   gridVisible: boolean
+  /** The plan shows walls, doors and windows (as the drawings do) over the rooms. */
+  wallsVisible: boolean
   /** Sheet open in the Drawings view — an id from `sheetRegister` (lib/drawings/sheets). */
   activeSheetId: string
   status: 'idle' | 'loading' | 'error'
@@ -109,6 +111,11 @@ interface DesignState {
   zoomOut: () => void
   resetZoom: () => void
   toggleGrid: () => void
+  toggleWalls: () => void
+  /** Changes one of the active floor's doors or windows (null puts it back where the rules place it). */
+  setOpeningEdit: (key: string, edit: OpeningEdit | null) => void
+  /** Puts every door and window on the active floor back where the rules place them. */
+  resetOpeningEdits: () => void
   setActiveSheetId: (id: string) => void
 }
 
@@ -209,6 +216,17 @@ function queueGuidesSave({ projectId, floors, activeFloorId }: DesignState) {
   )
 }
 
+function queueOpeningEditsSave({ projectId, floors, activeFloorId }: DesignState) {
+  const floor = floors.find((f) => f.id === activeFloorId)
+  if (!projectId || !floor) return
+  queueSave(
+    `floor:${floor.id}`,
+    { openingEdits: floor.openingEdits ?? {} },
+    (merged) => floorsApi.updateFloor(projectId, floor.id, merged),
+    `Couldn't save the doors and windows on ${floor.name}.`,
+  )
+}
+
 function queuePlotSave(projectId: string, plot: Plot) {
   queueSave(
     'plot',
@@ -227,6 +245,7 @@ export const useDesignStore = create<DesignState>((set, get) => ({
   viewMode: '2d',
   zoom: 1,
   gridVisible: true,
+  wallsVisible: true,
   activeSheetId: 'site-layout',
   status: 'idle',
   error: null,
@@ -502,6 +521,28 @@ export const useDesignStore = create<DesignState>((set, get) => ({
   zoomOut: () => set((state) => ({ zoom: Math.max(MIN_ZOOM, +(state.zoom - 0.1).toFixed(2)) })),
   resetZoom: () => set({ zoom: 1 }),
   toggleGrid: () => set((state) => ({ gridVisible: !state.gridVisible })),
+
+  toggleWalls: () => set((state) => ({ wallsVisible: !state.wallsVisible })),
+
+  setOpeningEdit: (key, edit) => {
+    set((state) => ({
+      floors: mapFloor(state.floors, state.activeFloorId, (floor) => {
+        const { [key]: _old, ...rest } = floor.openingEdits ?? {}
+        return { ...floor, openingEdits: edit && Object.keys(edit).length > 0 ? { ...rest, [key]: edit } : rest }
+      }),
+      // A removed opening can't stay selected.
+      selection: edit?.removed && state.selection?.type === 'opening' && state.selection.id === key ? null : state.selection,
+    }))
+    queueOpeningEditsSave(get())
+  },
+
+  resetOpeningEdits: () => {
+    set((state) => ({
+      floors: mapFloor(state.floors, state.activeFloorId, (floor) => ({ ...floor, openingEdits: {} })),
+      selection: state.selection?.type === 'opening' ? null : state.selection,
+    }))
+    queueOpeningEditsSave(get())
+  },
   setActiveSheetId: (id) => set({ activeSheetId: id }),
 }))
 

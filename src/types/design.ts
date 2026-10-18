@@ -92,6 +92,22 @@ export interface WallOverride {
   type?: WallType
 }
 
+/**
+ * A change to one of the automatically placed doors or windows, keyed by the opening's stable key
+ * ("door:<room>|<room>", "main-door", "window:<room>:<side>:<n>"), so it survives room edits.
+ */
+export interface OpeningEdit {
+  /** Centre along its wall, as a fraction (0–1) of the wall's length. */
+  at?: number
+  /** Feet. */
+  width?: number
+  /** Doors: swing to the other side of the wall. */
+  flipSwing?: boolean
+  /** Doors: hinge at the other end of the opening. */
+  flipHinge?: boolean
+  removed?: boolean
+}
+
 export type OpeningKind = 'door' | 'window'
 
 /** A door or window embedded in a wall (Milestone 4). */
@@ -172,6 +188,8 @@ export interface Floor {
   rooms: Room[]
   wallOverrides: Record<string, WallOverride>
   openings: Opening[]
+  /** Changes to the automatic doors and windows (see OpeningEdit). */
+  openingEdits?: Record<string, OpeningEdit>
   furniture: Furniture[]
   staircases: Staircase[]
   guides: Guides

@@ -295,6 +295,23 @@ export async function getProject(projectId: string): Promise<ProjectDetail> {
   return mapDetail(await apiRequest<ProjectDetailDto>(`/projects/${projectId}`))
 }
 
+interface ProjectLayoutDto {
+  project_id: string
+  floors: ProjectDetailDto['floors']
+  rooms: ProjectDetailDto['rooms']
+}
+
+/** Every project's floors and rooms in one request (the dashboard's thumbnails, scores and costs). */
+export async function listProjectLayouts(): Promise<Map<string, Floor[]>> {
+  const dtos = await apiRequest<ProjectLayoutDto[]>('/projects/layouts')
+  return new Map(
+    dtos.map((dto) => [
+      dto.project_id,
+      dto.floors.map((floor) => mapFloor(floor, dto.rooms.filter((room) => room.floor_id === floor.id).map(mapRoom))),
+    ]),
+  )
+}
+
 /** Replaces every floor and room with a new plan (e.g. a generated option) in one request. */
 export async function replaceLayout(projectId: string, floors: Floor[], note?: string): Promise<ProjectDetail> {
   const dto = await apiRequest<ProjectDetailDto>(`/projects/${projectId}/layout`, {

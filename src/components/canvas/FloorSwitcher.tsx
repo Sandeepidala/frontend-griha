@@ -1,4 +1,4 @@
-import { Copy, Plus, Trash2 } from 'lucide-react'
+import { Copy, Plus, RotateCcw, Trash2 } from 'lucide-react'
 import { IconButton } from '@/components/ui/IconButton'
 import { Popover } from '@/components/ui/Popover'
 import { cn } from '@/lib/cn'
@@ -15,6 +15,8 @@ export function FloorSwitcher({ orientation = 'horizontal' }: { orientation?: 'h
   const addFloor = useDesignStore((state) => state.addFloor)
   const removeFloor = useDesignStore((state) => state.removeFloor)
   const duplicateFloor = useDesignStore((state) => state.duplicateFloor)
+  const resetOpeningEdits = useDesignStore((state) => state.resetOpeningEdits)
+  const changedOpenings = Object.keys(floors.find((f) => f.id === activeFloorId)?.openingEdits ?? {}).length
   const vertical = orientation === 'vertical'
 
   const sortedFloors = [...floors].sort((a, b) => b.level - a.level)
@@ -52,6 +54,18 @@ export function FloorSwitcher({ orientation = 'horizontal' }: { orientation?: 'h
           >
             <Copy className="size-4" /> Duplicate current floor
           </button>
+          {changedOpenings > 0 && (
+            <button
+              type="button"
+              onClick={() => {
+                resetOpeningEdits()
+                close()
+              }}
+              className="flex items-center gap-2 rounded-sm px-2.5 py-2 text-left text-sm text-text transition-colors hover:bg-surface-2"
+            >
+              <RotateCcw className="size-4" /> Reset doors and windows ({changedOpenings})
+            </button>
+          )}
           {floors.length > 1 && (
             <button
               type="button"

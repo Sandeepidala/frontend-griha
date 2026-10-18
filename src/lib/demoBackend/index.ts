@@ -366,7 +366,7 @@ const ROOM_FIELDS = [
   'notes',
 ] as const satisfies readonly (keyof RoomDto)[]
 
-const FLOOR_FIELDS = ['name', 'level', 'elevation', 'guides'] as const satisfies readonly (keyof FloorDto)[]
+const FLOOR_FIELDS = ['name', 'level', 'elevation', 'guides', 'opening_edits'] as const satisfies readonly (keyof FloorDto)[]
 
 function projectFloor(project: DemoProject, floorId: string): FloorDto {
   const floor = database().floors.find((f) => f.id === floorId && f.project_id === project.id)
@@ -431,9 +431,23 @@ function duplicateFloor(project: DemoProject, source: FloorDto, body: Body): Flo
     project_id: project.id,
     guides: { vertical: [...source.guides.vertical], horizontal: [...source.guides.horizontal] },
   }
-  const rooms = database()
-    .rooms.filter((r) => r.floor_id === source.id)
-    .map((r) => ({ ...r, id: createId(), floor_id: copy.id }))
+  const sourceRooms = database().rooms.filter((r) => r.floor_id === source.id)
+  const rooms = sourceRooms.map((r) => ({ ...r, id: createId(), floor_id: copy.id }))
+  // The door and window changes name rooms by id; point them at the copies (as the API does).
+  const ids = new Map(sourceRooms.map((r, i) => [r.id, rooms[i].id]))
+  copy.opening_edits = Object.fromEntries(
+    Object.entries(source.opening_edits ?? {}).flatMap(([key, value]): [string, typeof value][] => {
+      if (key.startsWith('door:')) {
+        const pair = key.slice(5).split('|')
+        return pair.every((id) => ids.has(id)) ? [[`door:${pair.map((id) => ids.get(id)!).sort().join('|')}`, value]] : []
+      }
+      if (key.startsWith('window:')) {
+        const [, id, ...rest] = key.split(':')
+        return ids.has(id) ? [[['window', ids.get(id)!, ...rest].join(':'), value]] : []
+      }
+      return [[key, value]]
+    }),
+  )
   database().floors.push(copy)
   database().rooms.push(...rooms)
   return { ...copy, rooms }
@@ -668,6 +682,13 @@ function route(method: HttpMethod, segments: string[], body: Body, token: string
           .map(projectSummary)
       }
       if (method === 'POST') return createProject(user, body)
+    }
+
+    if (projectId === 'layouts' && !collection && method === 'GET') {
+      const data = database()
+      return data.projects
+        .filter((p) => p.owner_id === user.id)
+        .map((p) => ({ project_id: p.id, floors: projectFloors(p.id), rooms: data.rooms.filter((r) => r.project_id === p.id) }))
     }
 
     const project = ownedProject(user, projectId)

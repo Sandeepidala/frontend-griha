@@ -1,6 +1,14 @@
 import { apiRequest } from './apiClient'
 import { mapRoom, type RoomDto } from './roomsApi'
-import type { Floor, Guides, Room } from '@/types/design'
+import type { Floor, Guides, OpeningEdit, Room } from '@/types/design'
+
+export interface OpeningEditDto {
+  at?: number | null
+  width?: number | null
+  flip_swing?: boolean | null
+  flip_hinge?: boolean | null
+  removed?: boolean | null
+}
 
 export interface FloorDto {
   id: string
@@ -9,6 +17,23 @@ export interface FloorDto {
   level: number
   elevation: number
   guides: Guides
+  opening_edits?: Record<string, OpeningEditDto>
+}
+
+function editFromDto(dto: OpeningEditDto): OpeningEdit {
+  const edit: OpeningEdit = {}
+  if (dto.at != null) edit.at = dto.at
+  if (dto.width != null) edit.width = dto.width
+  if (dto.flip_swing) edit.flipSwing = true
+  if (dto.flip_hinge) edit.flipHinge = true
+  if (dto.removed) edit.removed = true
+  return edit
+}
+
+export function editsToDto(edits: Record<string, OpeningEdit>): Record<string, OpeningEditDto> {
+  return Object.fromEntries(
+    Object.entries(edits).map(([key, e]) => [key, { at: e.at, width: e.width, flip_swing: e.flipSwing, flip_hinge: e.flipHinge, removed: e.removed }]),
+  )
 }
 
 export interface FloorWithRoomsDto extends FloorDto {
@@ -17,7 +42,7 @@ export interface FloorWithRoomsDto extends FloorDto {
 
 export type FloorPlacement = Pick<Floor, 'name' | 'level' | 'elevation'>
 
-/** Wall overrides, openings, furniture and staircases aren't stored by the backend yet. */
+/** Wall overrides, placed openings, furniture and staircases aren't stored by the backend yet. */
 export function mapFloor(dto: FloorDto, rooms: Room[]): Floor {
   return {
     id: dto.id,
@@ -27,6 +52,7 @@ export function mapFloor(dto: FloorDto, rooms: Room[]): Floor {
     rooms,
     wallOverrides: {},
     openings: [],
+    openingEdits: Object.fromEntries(Object.entries(dto.opening_edits ?? {}).map(([key, e]) => [key, editFromDto(e)])),
     furniture: [],
     staircases: [],
     guides: dto.guides,
@@ -41,9 +67,11 @@ export async function createFloor(projectId: string, input: FloorPlacement): Pro
 export async function updateFloor(
   projectId: string,
   floorId: string,
-  patch: Partial<FloorPlacement & { guides: Guides }>,
+  patch: Partial<FloorPlacement & { guides: Guides; openingEdits: Record<string, OpeningEdit> }>,
 ): Promise<void> {
-  await apiRequest(`/projects/${projectId}/floors/${floorId}`, { method: 'PATCH', body: patch })
+  const { openingEdits, ...rest } = patch
+  const body = openingEdits ? { ...rest, opening_edits: editsToDto(openingEdits) } : rest
+  await apiRequest(`/projects/${projectId}/floors/${floorId}`, { method: 'PATCH', body })
 }
 
 export async function deleteFloor(projectId: string, floorId: string): Promise<void> {

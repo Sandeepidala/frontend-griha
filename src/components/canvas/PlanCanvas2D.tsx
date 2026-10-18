@@ -5,6 +5,7 @@ import { useElementSize } from '@/hooks/useElementSize'
 import { useThemeColors } from '@/hooks/useThemeColors'
 import { Ruler, RULER_SIZE } from '@/components/canvas/Ruler'
 import { PlanViewControls } from '@/components/canvas/PlanViewControls'
+import { WallsLayer } from '@/components/canvas/WallsLayer'
 import { RoomsLayer } from '@/components/canvas/RoomsLayer'
 import { useSnapDrag } from '@/components/canvas/useSnapDrag'
 import { useActiveFloor, useDesignStore } from '@/stores/useDesignStore'
@@ -30,6 +31,10 @@ export function PlanCanvas2D() {
   const removeGuide = useDesignStore((state) => state.removeGuide)
   const zoomIn = useDesignStore((state) => state.zoomIn)
   const zoomOut = useDesignStore((state) => state.zoomOut)
+  const floors = useDesignStore((state) => state.floors)
+  const wallsVisible = useDesignStore((state) => state.wallsVisible)
+  const setOpeningEdit = useDesignStore((state) => state.setOpeningEdit)
+  const selectedOpeningKey = selection?.type === 'opening' ? selection.id : null
 
   const guideDragAxisRef = useRef<keyof Guides | null>(null)
   const [guideDrag, setGuideDrag] = useState<{ axis: keyof Guides; pixel: number } | null>(null)
@@ -187,6 +192,21 @@ export function PlanCanvas2D() {
                   />
                 ))}
 
+                {wallsVisible && (
+                  <WallsLayer
+                    part="under"
+                    floor={activeFloor}
+                    floors={floors}
+                    plot={plot}
+                    scale={scale}
+                    toScreen={(x, y) => ({ x: offsetX + x * scale, y: offsetY + y * scale })}
+                    colors={colors}
+                    selectedKey={selectedOpeningKey}
+                    onSelect={() => {}}
+                    onMove={() => {}}
+                  />
+                )}
+
                 <RoomsLayer
                   rooms={rooms}
                   units={plot.units}
@@ -197,6 +217,21 @@ export function PlanCanvas2D() {
                   onSelect={(id) => select({ type: 'room', id })}
                   drag={roomDrag}
                 />
+
+                {wallsVisible && (
+                  <WallsLayer
+                    part="over"
+                    floor={activeFloor}
+                    floors={floors}
+                    plot={plot}
+                    scale={scale}
+                    toScreen={(x, y) => ({ x: offsetX + x * scale, y: offsetY + y * scale })}
+                    colors={colors}
+                    selectedKey={selectedOpeningKey}
+                    onSelect={(key) => select({ type: 'opening', id: key })}
+                    onMove={(key, at) => setOpeningEdit(key, { ...activeFloor.openingEdits?.[key], at })}
+                  />
+                )}
 
                 {setbackRect && (
                   <Rect

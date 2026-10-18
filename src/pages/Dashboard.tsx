@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import { AlertTriangle, Building2, CheckCircle2, Clock, FolderKanban, IndianRupee, Sparkles } from 'lucide-react'
 import { Navigate, useNavigate } from 'react-router-dom'
 import { Container } from '@/components/layout/Container'
@@ -6,12 +7,13 @@ import { Button } from '@/components/ui/Button'
 import { Card, CardBody } from '@/components/ui/Card'
 import { Spinner } from '@/components/ui/Spinner'
 import { EmptyState } from '@/components/widgets/EmptyState'
-import { ProjectStatusBadge } from '@/components/widgets/ProjectStatusBadge'
+import { ProjectCard } from '@/components/widgets/ProjectCard'
 import { StatCard } from '@/components/widgets/StatCard'
-import { describeBrief } from '@/lib/brief'
 import { formatCurrency } from '@/lib/format'
+import { listProjectLayouts } from '@/lib/projectsApi'
 import { useAuthStore } from '@/stores/useAuthStore'
 import { useProjectsStore } from '@/stores/useProjectsStore'
+import type { Floor } from '@/types/design'
 
 export function Dashboard() {
   const navigate = useNavigate()
@@ -23,6 +25,19 @@ export function Dashboard() {
   const setActiveProject = useProjectsStore((state) => state.setActiveProject)
   const fetchProjects = useProjectsStore((state) => state.fetchProjects)
   const isArchitect = useAuthStore((state) => state.user?.role === 'architect')
+  // Every project's plan, for the cards' thumbnails, scores and costs; fetched once per visit.
+  const [layouts, setLayouts] = useState<Map<string, Floor[]> | null>(null)
+  const projectsKey = projects.map((p) => `${p.id}:${p.updatedAt}`).join(',')
+  useEffect(() => {
+    if (!projectsKey) return
+    let cancelled = false
+    listProjectLayouts()
+      .then((result) => !cancelled && setLayouts(result))
+      .catch(() => !cancelled && setLayouts(new Map()))
+    return () => {
+      cancelled = true
+    }
+  }, [projectsKey])
 
   if (status === 'loading' && !hasLoaded) {
     return (
@@ -102,25 +117,17 @@ export function Dashboard() {
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
           <div className="flex flex-col gap-3 lg:col-span-2">
             <h2 className="font-display text-sm font-semibold text-text">Projects</h2>
-            {projects.map((project) => (
-              <Card
-                key={project.id}
-                className="cursor-pointer transition-colors hover:border-border-strong"
-                onClick={() => openProject(project.id)}
-              >
-                <CardBody className="flex flex-wrap items-center justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="truncate font-display font-semibold text-text">{project.name}</p>
-                    <p className="mt-0.5 text-xs text-text-muted">
-                      {project.plotWidth}' × {project.plotHeight}' · {formatCurrency(project.budget)} ·{' '}
-                      {project.facing[0].toUpperCase() + project.facing.slice(1)}-facing
-                    </p>
-                    <p className="mt-0.5 text-xs text-text-faint">{describeBrief(project.brief)}</p>
-                  </div>
-                  <ProjectStatusBadge status={project.status} />
-                </CardBody>
-              </Card>
-            ))}
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              {projects.map((project, i) => (
+                <ProjectCard
+                  key={project.id}
+                  project={project}
+                  floors={layouts?.get(project.id) ?? (layouts ? [] : undefined)}
+                  order={i}
+                  onOpen={() => openProject(project.id)}
+                />
+              ))}
+            </div>
           </div>
 
           <div className="flex flex-col gap-3">

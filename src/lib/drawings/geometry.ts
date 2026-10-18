@@ -1,4 +1,4 @@
-import type { Floor, Plot, Room, RoomType } from '@/types/design'
+import type { Floor, OpeningEdit, Plot, Room, RoomType } from '@/types/design'
 
 /**
  * Derived building geometry shared by every drawing sheet and the 3D model sheets.
@@ -254,6 +254,8 @@ export type PlanOpeningKind = 'door' | 'main-door' | 'window' | 'ventilator'
 
 export interface PlanOpening {
   id: string
+  /** Stable across room edits: what a saved OpeningEdit is keyed by. */
+  key: string
   kind: PlanOpeningKind
   wall: WallSegment
   /** Along-wall coordinate of the opening centre (x for horizontal walls, y for vertical). */
@@ -265,6 +267,17 @@ export interface PlanOpening {
   sill: number
   height: number
   roomIds: string[]
+}
+
+export const MAIN_DOOR_KEY = 'main-door'
+
+/** A door between two rooms, whichever order they come in. */
+export function doorKey(a: string, b: string) {
+  return `door:${[a, b].sort().join('|')}`
+}
+
+export function windowKey(roomId: string, side: Side | null, index: number) {
+  return `window:${roomId}:${side ?? '-'}:${index}`
 }
 
 export function isDoor(opening: PlanOpening) {
@@ -325,9 +338,39 @@ export const SETBACK_SIDES: Record<Plot['facing'], Record<'front' | 'rear' | 'le
  * bedroom-to-bedroom doors), the main door goes on the entrance room's road-facing wall, and
  * every habitable room gets a window on each exterior wall.
  */
-export function deriveOpenings(rooms: PlanRoom[], walls: WallSegment[], plot: Plot, isEntranceFloor: boolean) {
+export function deriveOpenings(
+  rooms: PlanRoom[],
+  walls: WallSegment[],
+  plot: Plot,
+  isEntranceFloor: boolean,
+  edits: Record<string, OpeningEdit> = {},
+) {
   const byId = new Map(rooms.map((r) => [r.id, r]))
   const openings: PlanOpening[] = []
+  /** The customer's change to an opening, applied on top of where the rules put it. */
+  const place = (opening: PlanOpening) => {
+    const edit = edits[opening.key]
+    if (edit?.removed) return
+    if (edit) {
+      const length = wallLength(opening.wall)
+      const width = edit.width ? Math.min(Math.max(edit.width, 1.5), Math.max(1.5, length - 0.5)) : opening.width
+      const margin = width / 2 + 0.25
+      const center =
+        edit.at === undefined
+          ? opening.center
+          : length <= margin * 2
+            ? (opening.wall.from + opening.wall.to) / 2
+            : Math.min(Math.max(opening.wall.from + edit.at * length, opening.wall.from + margin), opening.wall.to - margin)
+      opening = {
+        ...opening,
+        width,
+        center,
+        swingSide: edit.flipSwing && opening.swingSide ? OPPOSITE[opening.swingSide] : opening.swingSide,
+        hingeAtStart: edit.flipHinge ? !opening.hingeAtStart : opening.hingeAtStart,
+      }
+    }
+    openings.push(opening)
+  }
 
   // Longest shared partition for each adjacent pair of rooms.
   const shared = new Map<string, WallSegment>()
@@ -364,8 +407,9 @@ export function deriveOpenings(rooms: PlanRoom[], walls: WallSegment[], plot: Pl
     const length = wallLength(wall)
     const centerAlong = length > width + 4 ? wall.from + 1 + width / 2 : (wall.from + wall.to) / 2
     const target = swingInto(a, b)
-    openings.push({
+    place({
       id: `door-${a.id}-${b.id}`,
+      key: doorKey(a.id, b.id),
       kind: 'door',
       wall,
       center: centerAlong,
@@ -387,8 +431,9 @@ export function deriveOpenings(rooms: PlanRoom[], walls: WallSegment[], plot: Pl
     }
     const entrance = frontWalls.sort((a, b) => rank(a) - rank(b) || wallLength(b) - wallLength(a))[0]
     if (entrance) {
-      openings.push({
+      place({
         id: 'main-door',
+        key: MAIN_DOOR_KEY,
         kind: 'main-door',
         wall: entrance,
         center: (entrance.from + entrance.to) / 2,
@@ -401,6 +446,15 @@ export function deriveOpenings(rooms: PlanRoom[], walls: WallSegment[], plot: Pl
       })
     }
   }
+
+  // A window's key is its room, the side it faces and which of that room's walls on that side it's on.
+  const sideIndex = new Map<string, number>()
+  const exteriorBySide = new Map<string, WallSegment[]>()
+  for (const wall of walls.filter((w) => w.exterior)) {
+    const group = `${wall.roomIds[0]}:${wall.outside}`
+    exteriorBySide.set(group, [...(exteriorBySide.get(group) ?? []), wall])
+  }
+  for (const group of exteriorBySide.values()) group.sort((a, b) => a.from - b.from).forEach((wall, i) => sideIndex.set(wall.id, i))
 
   for (const wall of walls) {
     if (!wall.exterior) continue
@@ -428,7 +482,8 @@ export function deriveOpenings(rooms: PlanRoom[], walls: WallSegment[], plot: Pl
     if (length < width + 1.5) continue
 
     let centerAlong = (wall.from + wall.to) / 2
-    const door = openings.find((o) => o.wall.id === wall.id)
+    // Keep clear of a door on the same wall (wherever the customer put it).
+    const door = openings.find((o) => o.wall.id === wall.id && isDoor(o))
     if (door) {
       const before = door.center - door.width / 2 - wall.from
       const after = wall.to - (door.center + door.width / 2)
@@ -436,8 +491,9 @@ export function deriveOpenings(rooms: PlanRoom[], walls: WallSegment[], plot: Pl
       if (room2 < width + 1.5) continue
       centerAlong = before > after ? wall.from + before / 2 : door.center + door.width / 2 + after / 2
     }
-    openings.push({
+    place({
       id: `${kind}-${wall.id}`,
+      key: windowKey(room.id, wall.outside, sideIndex.get(wall.id) ?? 0),
       kind,
       wall,
       center: centerAlong,
@@ -486,7 +542,7 @@ export function buildFloorModel(floor: Floor, floors: Floor[], plot: Plot): Floo
   const walls = deriveWalls(rooms)
   const lowest = sortFloors(floors)[0]
   const isLowest = lowest?.id === floor.id
-  const openings = deriveOpenings(rooms, walls, plot, isLowest)
+  const openings = deriveOpenings(rooms, walls, plot, isLowest, floor.openingEdits)
   const inner = unionRect(rooms)
   return {
     floor,

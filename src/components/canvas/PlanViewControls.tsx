@@ -1,4 +1,4 @@
-import { Grid3x3, Minus, Plus, Ruler } from 'lucide-react'
+import { BrickWall, Grid3x3, Minus, Plus, Ruler } from 'lucide-react'
 import { IconButton } from '@/components/ui/IconButton'
 import { Tooltip } from '@/components/ui/Tooltip'
 import { useActiveFloor, useDesignStore } from '@/stores/useDesignStore'
@@ -11,12 +11,20 @@ export function PlanViewControls() {
   const resetZoom = useDesignStore((state) => state.resetZoom)
   const gridVisible = useDesignStore((state) => state.gridVisible)
   const toggleGrid = useDesignStore((state) => state.toggleGrid)
+  const wallsVisible = useDesignStore((state) => state.wallsVisible)
+  const toggleWalls = useDesignStore((state) => state.toggleWalls)
   const clearGuides = useDesignStore((state) => state.clearGuides)
   const guides = useActiveFloor().guides
   const hasGuides = guides.vertical.length > 0 || guides.horizontal.length > 0
 
   return (
     <div className="flex items-center gap-1 rounded-lg border border-border bg-surface/95 p-1 shadow-md">
+      <Tooltip content={wallsVisible ? 'Hide walls, doors and windows' : 'Show walls, doors and windows'}>
+        <IconButton label="Show walls, doors and windows" variant={wallsVisible ? 'outline' : 'ghost'} size="sm" onClick={toggleWalls} aria-pressed={wallsVisible}>
+          <BrickWall className="size-4" />
+        </IconButton>
+      </Tooltip>
+
       <Tooltip content="Toggle grid">
         <IconButton label="Toggle grid" variant={gridVisible ? 'outline' : 'ghost'} size="sm" onClick={toggleGrid}>
           <Grid3x3 className="size-4" />

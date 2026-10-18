@@ -1,5 +1,5 @@
-import type { ChangeEvent, ReactNode } from 'react'
-import { Eye, EyeOff, Lock, Plus, StickyNote, Trash2, Unlock, X } from 'lucide-react'
+import { type ChangeEvent, type ReactNode, useMemo } from 'react'
+import { Eye, EyeOff, FlipHorizontal2, FlipVertical2, Lock, Plus, RotateCcw, StickyNote, Trash2, Unlock, X } from 'lucide-react'
 import { roomPalette } from '@/components/canvas/roomPalette'
 import { IconButton } from '@/components/ui/IconButton'
 import { Input } from '@/components/ui/Input'
@@ -11,9 +11,10 @@ import { Divider } from '@/components/ui/Divider'
 import { Tooltip } from '@/components/ui/Tooltip'
 import { useThemeColors } from '@/hooks/useThemeColors'
 import { cn } from '@/lib/cn'
-import { fromDisplayLength, toDisplayLength, unitSuffix } from '@/lib/units'
-import { useDesignStore, useSelectedRoom } from '@/stores/useDesignStore'
-import type { FloorFinish, LengthUnit, Room, RoomType, Setbacks } from '@/types/design'
+import { type PlanOpeningKind, type Side, buildFloorModel, isDoor, wallLength } from '@/lib/drawings/geometry'
+import { formatLength, fromDisplayLength, toDisplayLength, unitSuffix } from '@/lib/units'
+import { useActiveFloor, useDesignStore, useSelectedRoom } from '@/stores/useDesignStore'
+import type { FloorFinish, LengthUnit, OpeningEdit, Room, RoomType, Setbacks } from '@/types/design'
 
 const ROOM_TYPE_LABELS: Record<RoomType, string> = {
   living: 'Living',
@@ -272,6 +273,115 @@ function RoomToolbar({ room }: { room: Room }) {
   )
 }
 
+const SIDE_NAMES: Record<Side, string> = { N: 'north', S: 'south', E: 'east', W: 'west' }
+const OPENING_LABELS: Record<PlanOpeningKind, string> = { door: 'Door', 'main-door': 'Main door', window: 'Window', ventilator: 'Ventilator' }
+const OPENING_WIDTHS: Record<PlanOpeningKind, number[]> = {
+  door: [2.5, 3, 3.5, 4],
+  'main-door': [3, 3.5, 4, 5],
+  window: [2, 3, 4, 5, 6],
+  ventilator: [1.5, 2, 2.5],
+}
+
+/** A group of buttons under a caption (a div: a <label> would pass clicks on its caption to the first button). */
+function ToolbarGroup({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="flex flex-col gap-1">
+      <span className="text-[10px] font-semibold tracking-wide text-text-faint uppercase">{label}</span>
+      <div className="flex min-h-8 items-center gap-1">{children}</div>
+    </div>
+  )
+}
+
+/** The selected door or window: its size and place on the wall, its swing, and removing or resetting it. */
+function OpeningToolbar({ openingKey }: { openingKey: string }) {
+  const plot = useDesignStore((state) => state.plot)
+  const floors = useDesignStore((state) => state.floors)
+  const floor = useActiveFloor()
+  const setOpeningEdit = useDesignStore((state) => state.setOpeningEdit)
+  const model = useMemo(() => buildFloorModel(floor, floors, plot), [floor, floors, plot])
+  const opening = model.openings.find((o) => o.key === openingKey)
+  if (!opening) return <p className="self-center text-sm text-text-muted">That door or window is no longer on this floor.</p>
+
+  const edit = floor.openingEdits?.[openingKey] ?? {}
+  const change = (patch: OpeningEdit) => setOpeningEdit(openingKey, { ...edit, ...patch })
+  const roomName = (id: string) => model.rooms.find((r) => r.id === id)?.name ?? 'a room'
+  const side = opening.wall.outside ? SIDE_NAMES[opening.wall.outside] : null
+  const door = isDoor(opening)
+  const description =
+    opening.kind === 'door'
+      ? `Between ${roomName(opening.roomIds[0])} and ${roomName(opening.roomIds[1])}`
+      : `${roomName(opening.roomIds[0])}${side ? `, ${side} wall` : ''}`
+  const length = wallLength(opening.wall)
+  const at = length > 0 ? (opening.center - opening.wall.from) / length : 0.5
+  const widths = [...new Set([...OPENING_WIDTHS[opening.kind], opening.width])].sort((a, b) => a - b)
+  const noun = door ? 'door' : 'window'
+
+  return (
+    <>
+      <ToolbarGroup label={OPENING_LABELS[opening.kind]}>
+        <span className="text-sm font-medium text-text">{description}</span>
+      </ToolbarGroup>
+
+      <Divider orientation="vertical" />
+
+      <ToolbarField label="Width">
+        <Select selectSize="sm" className="w-24" value={String(opening.width)} onChange={(event) => change({ width: Number(event.target.value) })}>
+          {widths.map((value) => (
+            <option key={value} value={value}>
+              {formatLength(value, plot.units)}
+            </option>
+          ))}
+        </Select>
+      </ToolbarField>
+
+      <ToolbarField label="Along the wall">
+        <input
+          type="range"
+          min={0}
+          max={1}
+          step={0.01}
+          value={at}
+          onChange={(event) => change({ at: Number(event.target.value) })}
+          className="h-8 w-40 accent-primary"
+          aria-label="Position along the wall (or drag it on the plan)"
+        />
+      </ToolbarField>
+
+      {door && (
+        <ToolbarGroup label="Swing">
+          <Tooltip content="Open to the other side of the wall">
+            <IconButton label="Flip the swing" size="sm" variant="outline" onClick={() => change({ flipSwing: !edit.flipSwing })}>
+              <FlipVertical2 className="size-4" />
+            </IconButton>
+          </Tooltip>
+          <Tooltip content="Hinge at the other end">
+            <IconButton label="Flip the hinge" size="sm" variant="outline" onClick={() => change({ flipHinge: !edit.flipHinge })}>
+              <FlipHorizontal2 className="size-4" />
+            </IconButton>
+          </Tooltip>
+        </ToolbarGroup>
+      )}
+
+      <Divider orientation="vertical" />
+
+      <ToolbarGroup label="Change">
+        {Object.keys(edit).length > 0 && (
+          <Tooltip content="Back to where Griha placed it">
+            <IconButton label={`Reset this ${noun}`} size="sm" variant="ghost" onClick={() => setOpeningEdit(openingKey, null)}>
+              <RotateCcw className="size-4" />
+            </IconButton>
+          </Tooltip>
+        )}
+        <Tooltip content={`Remove this ${noun}`}>
+          <IconButton label={`Remove this ${noun}`} size="sm" variant="ghost" onClick={() => change({ removed: true })}>
+            <Trash2 className="size-4 text-danger" />
+          </IconButton>
+        </Tooltip>
+      </ToolbarGroup>
+    </>
+  )
+}
+
 function PlotToolbar() {
   const plot = useDesignStore((state) => state.plot)
   const updatePlot = useDesignStore((state) => state.updatePlot)
@@ -365,10 +475,17 @@ function PlotToolbar() {
 
 export function SelectionToolbar() {
   const selectedRoom = useSelectedRoom()
+  const selection = useDesignStore((state) => state.selection)
 
   return (
     <div className="flex min-h-14 shrink-0 flex-wrap items-end gap-x-4 gap-y-2 border-b border-border bg-surface-2/60 px-4 py-2 sm:px-6">
-      {selectedRoom ? <RoomToolbar room={selectedRoom} /> : <PlotToolbar />}
+      {selectedRoom ? (
+        <RoomToolbar room={selectedRoom} />
+      ) : selection?.type === 'opening' ? (
+        <OpeningToolbar openingKey={selection.id} />
+      ) : (
+        <PlotToolbar />
+      )}
     </div>
   )
 }
