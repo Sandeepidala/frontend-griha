@@ -189,7 +189,7 @@ export function StyleButton({ compact = false }: { compact?: boolean }) {
   return (
     <Button variant="outline" size="sm" onClick={() => setOpen(true)} className="shrink-0 gap-2" title={`House style: ${kit.name}, ${palette.name}`}>
       <Swatch palette={palette} kit={kit} className="[&>span]:size-3" />
-      <span className={compact ? '' : 'sr-only xl:not-sr-only'}>{compact ? `${kit.name} · ${palette.name}` : 'Style'}</span>
+      <span className={compact ? '' : 'sr-only 2xl:not-sr-only'}>{compact ? `${kit.name} · ${palette.name}` : 'Style'}</span>
     </Button>
   )
 }

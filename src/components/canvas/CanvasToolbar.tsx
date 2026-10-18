@@ -1,5 +1,6 @@
 import { ClipboardList, Columns2, FileStack, IndianRupee, ListChecks, MapPinned, Scaling, ShieldCheck, Sparkles, View } from 'lucide-react'
 import { BuildSequenceButton } from '@/components/canvas/BuildSequenceButton'
+import { ShareButton } from '@/components/share/SharePanel'
 import { StyleButton } from '@/components/style/StylePicker'
 import { ReviewStatusBadge } from '@/components/reviews/ReviewParts'
 import { Badge } from '@/components/ui/Badge'
@@ -53,8 +54,9 @@ export function CanvasToolbar({
   const openBriefEditor = useProjectsStore((state) => state.openBriefEditor)
 
   // Project-wide actions only; the floor tabs and the plan's grid and zoom sit in the row below,
-  // with the plot and room fields. Below 2xl the score and estimate chips drop their words (their
-  // values stay), and below xl the action buttons keep only their icons, so the row fits a laptop.
+  // with the plot and room fields. Below 1700px the score and estimate chips drop their words (their
+  // values stay), below 2xl Generate, Style and Share keep only their icons, and below xl so do the
+  // other actions, so the row fits a laptop.
   return (
     <div className="flex h-12 shrink-0 items-center gap-2 overflow-x-auto border-b border-border bg-surface px-4 sm:px-6 2xl:gap-3">
       <SegmentedControl value={viewMode} onChange={setViewMode} options={VIEW_OPTIONS} />
@@ -64,7 +66,7 @@ export function CanvasToolbar({
       {projectId && onOpenGenerate && (
         <Button variant="outline" size="sm" onClick={onOpenGenerate} className="shrink-0 gap-2" title="Generate layout options from the brief">
           <Sparkles className="size-4" />
-          <span className="sr-only xl:not-sr-only">Generate</span>
+          <span className="sr-only 2xl:not-sr-only">Generate</span>
         </Button>
       )}
 
@@ -75,7 +77,7 @@ export function CanvasToolbar({
       {designReport && onOpenDesignCheck && designReport.categories.length > 0 && (
         <Button variant="outline" size="sm" onClick={onOpenDesignCheck} className="shrink-0 gap-2" title="Design check">
           <ListChecks className="size-4" />
-          <span className="sr-only 2xl:not-sr-only">Design check</span>
+          <span className="sr-only min-[1700px]:not-sr-only">Design check</span>
           <Badge variant={scoreVariant(designReport.score)} className="font-mono tabular-nums">
             {designReport.score}
           </Badge>
@@ -84,8 +86,8 @@ export function CanvasToolbar({
 
       {costEstimate && onOpenCostEstimate && costEstimate.sections.length > 0 && (
         <Button variant="outline" size="sm" onClick={onOpenCostEstimate} className="shrink-0 gap-2" title="Cost estimate">
-          <IndianRupee className="hidden size-4 2xl:block" />
-          <span className="sr-only 2xl:not-sr-only">Estimate</span>
+          <IndianRupee className="hidden size-4 min-[1700px]:block" />
+          <span className="sr-only min-[1700px]:not-sr-only">Estimate</span>
           <Badge
             variant={costEstimate.budget ? BUDGET_VARIANT[costEstimate.budget.status] : 'neutral'}
             className="font-mono tabular-nums"
@@ -94,6 +96,8 @@ export function CanvasToolbar({
           </Badge>
         </Button>
       )}
+
+      {projectId && <ShareButton />}
 
       {projectId && onOpenReview && (
         <Button variant="outline" size="sm" onClick={onOpenReview} className="shrink-0 gap-2" title="Architect review">

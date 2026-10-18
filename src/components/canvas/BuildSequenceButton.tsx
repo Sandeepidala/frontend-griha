@@ -30,7 +30,7 @@ export function BuildSequenceButton() {
         className="shrink-0 gap-2"
       >
         <Clapperboard className="size-4" />
-        <span className="hidden sm:inline">Watch it get built</span>
+        <span className="hidden xl:inline">Watch it get built</span>
       </Button>
       {open && (
         <Suspense

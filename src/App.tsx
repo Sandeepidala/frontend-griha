@@ -1,3 +1,4 @@
+import { Suspense, lazy } from 'react'
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { RequireAuth } from '@/components/RequireAuth'
@@ -15,6 +16,9 @@ import { ReviewWorkspace } from '@/pages/ReviewWorkspace'
 import { Reviews } from '@/pages/Reviews'
 import { Settings } from '@/pages/Settings'
 
+// A shared design is opened by people without an account, often on a phone: its own small chunk.
+const SharedProject = lazy(() => import('@/pages/SharedProject').then((m) => ({ default: m.SharedProject })))
+
 export default function App() {
   return (
     <BrowserRouter>
@@ -23,6 +27,14 @@ export default function App() {
         <Routes>
           <Route path="/sign-in" element={<SignIn />} />
           <Route path="/sign-up" element={<SignUp />} />
+          <Route
+            path="/s/:token"
+            element={
+              <Suspense fallback={null}>
+                <SharedProject />
+              </Suspense>
+            }
+          />
           {/* Password reset is simulated (see lib/dataMode), so it only exists in demo mode. */}
           <Route
             path="/forgot-password"
