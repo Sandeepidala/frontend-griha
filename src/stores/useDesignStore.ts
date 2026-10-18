@@ -1,13 +1,14 @@
 import { create } from 'zustand'
 import { ApiError } from '@/lib/apiClient'
 import type { RoomChange } from '@/lib/chatApi'
+import type { PlanFix } from '@/lib/designCheck/fixes'
 import * as floorsApi from '@/lib/floorsApi'
 import * as projectsApi from '@/lib/projectsApi'
 import * as roomsApi from '@/lib/roomsApi'
 import type { FloorPlacement } from '@/lib/floorsApi'
 import type { RoomFields } from '@/lib/roomsApi'
 import { toast } from '@/stores/useToastStore'
-import type { Floor, FloorFinish, Guides, OpeningEdit, Plot, Room, SelectionRef } from '@/types/design'
+import type { Floor, FloorFinish, Guides, OpeningEdit, Plot, Room, SelectionRef, Setbacks } from '@/types/design'
 
 const DEFAULT_WALL_HEIGHT = 9
 const DEFAULT_FLOOR_FINISH: FloorFinish = 'tile'
@@ -121,6 +122,8 @@ interface DesignState {
   applyRoomChanges: (changes: RoomChange[]) => void
   /** Undoes such changes, saving each step; false if some couldn't be undone. */
   revertRoomChanges: (changes: RoomChange[]) => Promise<boolean>
+  /** Applies a design check fix (lib/designCheck/fixes) and saves it; returns what undoing it needs. */
+  applyPlanFix: (fix: PlanFix) => { changes: RoomChange[]; setbacksBefore: Setbacks | null }
   setActiveSheetId: (id: string) => void
 }
 
@@ -601,6 +604,24 @@ export const useDesignStore = create<DesignState>((set, get) => ({
     }
     if (get().projectId === projectId) get().applyRoomChanges(undone)
     return ok
+  },
+
+  applyPlanFix: (fix) => {
+    const { floors, plot, projectId } = get()
+    const before = new Map(floors.flatMap((floor) => floor.rooms.map((room) => [room.id, room] as const)))
+    const changes: RoomChange[] = fix.floors.flatMap((floor) =>
+      floor.rooms.flatMap((room) => {
+        const previous = before.get(room.id)
+        return previous && previous !== room ? [{ kind: 'updated' as const, floorId: floor.id, room, before: previous }] : []
+      }),
+    )
+    const nextPlot = fix.setbacks ? { ...plot, setbacks: fix.setbacks } : plot
+    set({ floors: fix.floors, plot: nextPlot })
+    if (projectId) {
+      if (plotChanged(plot, nextPlot)) queuePlotSave(projectId, nextPlot)
+      for (const change of changes) queueRoomSave(projectId, change.room!, changedFields(change.before!, change.room!))
+    }
+    return { changes, setbacksBefore: fix.setbacks ? plot.setbacks : null }
   },
   setActiveSheetId: (id) => set({ activeSheetId: id }),
 }))

@@ -1,5 +1,5 @@
 import { buildBuildingModel, center, unionRect, type FloorModel, type PlanRoom, type Point, type Rect } from '@/lib/drawings/geometry'
-import type { DesignCheckInput } from './types'
+import type { DesignCheckInput, FixAction } from './types'
 
 /**
  * Compass zones of a 3 × 3 grid over an area: the building's footprint for room placement, as Vastu is
@@ -92,6 +92,14 @@ export const FT_PER_M = 3.28084
 
 export function sqft(room: { width: number; height: number }) {
   return room.width * room.height
+}
+
+/** Car spaces are 2.5 m (8.2 ft) wide. */
+const CAR_SPACE_WIDTH_FT = 8.2
+
+/** Grows a parking room by the area that is short, keeping it wide enough for a car. */
+export function growParking(floorId: string, room: PlanRoom, shortBy: number): FixAction {
+  return { kind: 'grow', floorId, roomId: room.id, minArea: Math.ceil(sqft(room) + shortBy), minWidth: CAR_SPACE_WIDTH_FT }
 }
 
 export function formatSqft(value: number) {

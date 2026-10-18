@@ -10,6 +10,7 @@ import { assistantContext, currentPlanReport } from '@/lib/assistantContext'
 import { type ChatMessage, type RoomChange, listMessages, sendMessage } from '@/lib/chatApi'
 import { DEMO_MODE } from '@/lib/dataMode'
 import { formatLength } from '@/lib/units'
+import { useAssistantStore } from '@/stores/useAssistantStore'
 import { useAuthStore } from '@/stores/useAuthStore'
 import { flushSaves, useDesignStore } from '@/stores/useDesignStore'
 import { useProjectsStore } from '@/stores/useProjectsStore'
@@ -99,7 +100,9 @@ function OutcomeCard({ outcome, units, canUndo, onUndo }: { outcome: Outcome; un
 }
 
 export function AiChatPanel() {
-  const [open, setOpen] = useState(false)
+  const open = useAssistantStore((state) => state.open)
+  const setOpen = useAssistantStore((state) => state.setOpen)
+  const queued = useAssistantStore((state) => state.queued)
   // The assistant works on the project open in the editor; elsewhere it answers general questions.
   const match = useMatch('/projects/:id')
   const routeProjectId = match?.params.id && match.params.id !== 'new' ? match.params.id : null
@@ -131,6 +134,13 @@ export function AiChatPanel() {
       cancelled = true
     }
   }, [open, key, projectId, conversation?.key])
+
+  // A message from elsewhere in the app (Design check's "Ask AI") goes out once the conversation is loaded.
+  useEffect(() => {
+    if (!open || !current || pending || queued === null) return
+    const message = useAssistantStore.getState().takeQueued()
+    if (message) void send(message)
+  })
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
@@ -188,7 +198,7 @@ export function AiChatPanel() {
       <IconButton
         label={open ? 'Close AI design assistant' : 'Open AI design assistant'}
         variant="ghost"
-        onClick={() => setOpen((v) => !v)}
+        onClick={() => setOpen(!open)}
       >
         <Sparkles className="size-[18px]" />
       </IconButton>

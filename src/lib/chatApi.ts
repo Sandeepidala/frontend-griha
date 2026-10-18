@@ -81,3 +81,9 @@ export async function sendMessage(
   })
   return { messages: result.messages.map(mapMessage), changes: result.changes.map(mapChange) }
 }
+
+/** Whether the server has the AI assistant switched on (it needs an API key). */
+export async function getAssistantStatus(): Promise<{ enabled: boolean; dailyLimit: number }> {
+  const dto = await apiRequest<{ enabled: boolean; daily_limit: number }>('/chat/status')
+  return { enabled: dto.enabled, dailyLimit: dto.daily_limit }
+}

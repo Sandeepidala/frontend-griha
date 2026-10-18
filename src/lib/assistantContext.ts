@@ -3,13 +3,19 @@ import type { AssistantContextDto } from '@/lib/chatApi'
 import { CATEGORY_LABELS, runDesignCheck } from '@/lib/designCheck'
 import { useDesignStore } from '@/stores/useDesignStore'
 import { useProjectsStore } from '@/stores/useProjectsStore'
+import type { Floor, Plot } from '@/types/design'
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const isUuid = (id: string | null | undefined): id is string => !!id && UUID.test(id)
 
-/** The open plan's cost estimate and design check, worked out as the editor does (hooks/useDesignReport). */
-export function currentPlanReport() {
-  const { plot, floors, projectId } = useDesignStore.getState()
+/**
+ * The open plan's cost estimate and design check, worked out as the editor does (hooks/useDesignReport);
+ * pass a changed plot and floors to see what a change would do.
+ */
+export function currentPlanReport(changed?: { plot: Plot; floors: Floor[] }) {
+  const state = useDesignStore.getState()
+  const { plot, floors } = changed ?? state
+  const { projectId } = state
   const project = useProjectsStore.getState().projects.find((p) => p.id === projectId) ?? null
   const brief = project?.brief ?? null
   const site = project?.site ?? null

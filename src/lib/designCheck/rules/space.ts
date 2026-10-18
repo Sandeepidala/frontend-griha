@@ -61,6 +61,7 @@ export function spaceChecks(ctx: CheckContext): CheckResult[] {
       detail: problems.join(', and ') + '.',
       roomIds: [room.id],
       floorId: model.floor.id,
+      fix: { kind: 'grow', floorId: model.floor.id, roomId: room.id, minArea: Math.ceil(minArea), minWidth: Math.ceil(minWidth * 4) / 4 },
     })
   }
 
@@ -105,6 +106,7 @@ export function spaceChecks(ctx: CheckContext): CheckResult[] {
           roomIds: [rooms[i].id, rooms[j].id],
           floorId: model.floor.id,
           weight: 2,
+          fix: { kind: 'separate', floorId: model.floor.id, roomIds: [rooms[i].id, rooms[j].id] },
         })
       }
     }

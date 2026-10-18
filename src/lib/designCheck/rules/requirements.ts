@@ -1,7 +1,7 @@
 import { EXTRA_ROOM_OPTIONS, floorsLabel } from '@/lib/brief'
 import type { PlanRoom } from '@/lib/drawings/geometry'
 import type { ExtraRoom } from '@/types/brief'
-import { formatSqft, isBathroom, isBedroom, isKitchen, isParking, isQuietRoom, nameMatches, sqft, type CheckContext } from '../context'
+import { formatSqft, growParking, isBathroom, isBedroom, isKitchen, isParking, isQuietRoom, nameMatches, sqft, type CheckContext } from '../context'
 import type { CheckResult } from '../types'
 
 /** One car space, 2.5 m × 5 m. */
@@ -96,6 +96,10 @@ export function requirementChecks(ctx: CheckContext): CheckResult[] {
             : `Parking is ${formatSqft(provided)}; ${cars(brief.parkingCars)} ${brief.parkingCars === 1 ? 'needs' : 'need'} about ${formatSqft(needed)}`,
       detail: parking.length === 0 ? 'Name a ground-floor room "Parking" (or "Garage", "Car porch").' : undefined,
       roomIds: parking.length > 0 && provided < needed ? parking.map((r) => r.id) : undefined,
+      fix:
+        parking.length > 0 && provided < needed && ctx.lowest
+          ? growParking(ctx.lowest.floor.id, [...parking].sort((a, b) => sqft(b) - sqft(a))[0], needed - provided)
+          : undefined,
     })
   }
 

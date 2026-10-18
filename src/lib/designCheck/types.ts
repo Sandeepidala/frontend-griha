@@ -1,5 +1,5 @@
 import type { ProjectBrief } from '@/types/brief'
-import type { Floor, Plot } from '@/types/design'
+import type { Floor, Plot, Setbacks } from '@/types/design'
 import type { SiteLocation } from '@/types/project'
 
 export type CheckStatus = 'pass' | 'warn' | 'fail'
@@ -17,6 +17,18 @@ export const CATEGORY_LABELS: Record<CheckCategory, string> = {
   compliance: 'Bye-laws',
 }
 
+/** A change that fixes a result without help (lib/designCheck/fixes works out the details). */
+export type FixAction =
+  /**
+   * Move the house inside the setback lines (raising the lines to `setbacks` first), trimming rooms if it
+   * doesn't fit. Where it fits inside `prefer` (the bye-law setbacks) without trimming, it goes there.
+   */
+  | { kind: 'fit-setbacks'; setbacks?: Setbacks; prefer?: Setbacks }
+  /** Trim one of two overlapping rooms so they only share a wall. */
+  | { kind: 'separate'; floorId: string; roomIds: [string, string] }
+  /** Grow a room into free space until it has this area (sq ft) and is this wide (ft) both ways. */
+  | { kind: 'grow'; floorId: string; roomId: string; minArea: number; minWidth: number }
+
 export interface CheckResult {
   /** Stable across re-runs for the same issue, so the UI can key and track it. */
   id: string
@@ -29,6 +41,7 @@ export interface CheckResult {
   floorId?: string
   /** How much the result counts towards its category score (default 1). */
   weight?: number
+  fix?: FixAction
 }
 
 export interface CategoryScore {

@@ -1,6 +1,6 @@
-import { requirementsFor } from '@/lib/byelaws'
+import { compliantSetbacks, requirementsFor } from '@/lib/byelaws'
 import { SETBACK_SIDES, providedSetbacks, unionRect, wallsArea } from '@/lib/drawings/geometry'
-import { isParking, sqft, type CheckContext } from '../context'
+import { growParking, isParking, sqft, type CheckContext } from '../context'
 import type { CheckResult } from '../types'
 
 /** One car space, 2.5 m × 5 m. */
@@ -41,6 +41,7 @@ export function complianceChecks(ctx: CheckContext): CheckResult[] {
         ? `The plot's ${key} setback line is set to ${ctx.plot.setbacks[key]} ft. Use the required setbacks, then keep rooms inside the new line.`
         : 'Move the rooms on this side back inside the setback line.',
       weight: 2,
+      fix: { kind: 'fit-setbacks', setbacks: lineTooLow ? compliantSetbacks(ctx.plot.setbacks, req.setbacks) : undefined },
     })
   }
   if (short === 0) {
@@ -95,13 +96,20 @@ export function complianceChecks(ctx: CheckContext): CheckResult[] {
 
   // Parking the rules require for this plot size.
   if (req.parkingCars > 0) {
-    const spaces = Math.floor((ctx.lowest?.rooms ?? []).filter(isParking).reduce((s, r) => s + sqft(r), 0) / CAR_SPACE_SQFT)
+    const parking = (ctx.lowest?.rooms ?? []).filter(isParking)
+    const area = parking.reduce((s, r) => s + sqft(r), 0)
+    const spaces = Math.floor(area / CAR_SPACE_SQFT)
+    const largest = [...parking].sort((a, b) => sqft(b) - sqft(a))[0]
     results.push({
       id: 'law-parking',
       category: 'compliance',
       status: spaces >= req.parkingCars ? 'pass' : 'fail',
       title: `Parking for ${spaces} car${spaces === 1 ? '' : 's'}; the bye-laws require ${req.parkingCars}`,
       detail: spaces >= req.parkingCars ? undefined : 'Add a ground-floor parking area of about 135 sq ft per car, named "Parking".',
+      fix:
+        spaces < req.parkingCars && largest && ctx.lowest
+          ? growParking(ctx.lowest.floor.id, largest, req.parkingCars * CAR_SPACE_SQFT - area)
+          : undefined,
     })
   }
 

@@ -1,3 +1,4 @@
+import { compliantSetbacks, requirementsFor } from '@/lib/byelaws'
 import { SETBACK_SIDES, providedSetbacks, requiredSetbacks, unionRect, type Side } from '@/lib/drawings/geometry'
 import type { CheckContext } from '../context'
 import type { CheckResult } from '../types'
@@ -34,6 +35,7 @@ export function siteChecks(ctx: CheckContext): CheckResult[] {
       title: `${SIDE_NAMES[key]} setback is ${have.toFixed(1)} ft; ${need} ft is required`,
       detail: 'Rooms and outer walls must stay inside the setback lines shown on the plan.',
       weight: 2,
+      fix: { kind: 'fit-setbacks', prefer: compliantSetbacks(ctx.plot.setbacks, requirementsFor(ctx.plot, ctx.brief).setbacks) },
     })
   }
   if (short === 0) {
