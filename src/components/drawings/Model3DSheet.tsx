@@ -10,6 +10,7 @@ import type { ItemKind, PlacedItem } from '@/lib/drawings/interior'
 import { type Box, MASSING_COLORS, floorShellBoxes } from '@/lib/drawings/massing'
 import type { DrawingSet } from '@/lib/drawings/sheets'
 import { lookFor } from '@/lib/style/kits'
+import { type HouseFrame, houseFrame } from '@/lib/three/framing'
 import { compoundWallRects, landscapeLayout, siteContext } from '@/lib/drawings/site'
 import type { FloorFinish } from '@/types/design'
 
@@ -228,15 +229,23 @@ function Site({ set, landscape }: { set: DrawingSet; landscape: boolean }) {
   )
 }
 
-function cameraFor(set: DrawingSet, mode: ModelMode): [number, number, number] {
-  const size = Math.max(set.plot.width, set.plot.height)
+/** What the camera frames: the house, one floor of it from inside, or the whole plot for the garden. */
+function viewFrame(set: DrawingSet, mode: ModelMode, interiorModel: FloorModel | undefined): HouseFrame {
+  if (mode === 'landscape') return houseFrame(set.plot, [])
+  if (mode === 'interior' && interiorModel?.footprint) return houseFrame(set.plot, [interiorModel.footprint])
+  return houseFrame(set.plot, set.models.flatMap((m) => (m.footprint ? [m.footprint] : [])))
+}
+
+function cameraFor(set: DrawingSet, mode: ModelMode, frame: HouseFrame): [number, number, number] {
+  const { center, size } = frame
   const dir = OUTWARD[frontSide(set.plot)]
   const top = set.models[set.models.length - 1]
   const height = top ? top.floor.elevation + top.height : 10
-  if (mode === 'interior') return [size * 0.4, size * 1.25, size * 1.05]
-  const dist = size * (mode === 'landscape' ? 2 : 1.75)
+  if (mode === 'interior') return [center.x + size * 0.45, size * 1.3, center.z + size * 1.1]
+  const dist = size * (mode === 'landscape' ? 2 : 2.7)
+  const lateral = size * (mode === 'landscape' ? 0.7 : 0.95)
   // Stand in front of the road-facing side, a little to one corner.
-  return [dir.x * dist + dir.y * size * 0.7, height * 1.1 + size * (mode === 'landscape' ? 0.8 : 0.45), dir.y * dist - dir.x * size * 0.7]
+  return [center.x + dir.x * dist + dir.y * lateral, height * 1.15 + size * (mode === 'landscape' ? 0.8 : 0.6), center.z + dir.y * dist - dir.x * lateral]
 }
 
 export function Model3DSheet({ set, mode, floorId }: { set: DrawingSet; mode: ModelMode; floorId: string }) {
@@ -244,16 +253,17 @@ export function Model3DSheet({ set, mode, floorId }: { set: DrawingSet; mode: Mo
   const items = mode === 'interior' && interiorModel ? set.items.get(interiorModel.floor.id) ?? [] : []
   const top = set.models[set.models.length - 1]
   const targetY = mode === 'interior' ? 0 : ((top ? top.floor.elevation + top.height : 10) / 2) * 0.8
-  const size = Math.max(set.plot.width, set.plot.height)
+  const frame = viewFrame(set, mode, interiorModel)
+  const { center, size } = frame
   return (
     <Canvas
       shadows="percentage"
       // Neutral tone mapping keeps paint colours true; the default filmic curve dulls and darkens them.
       gl={{ preserveDrawingBuffer: true, antialias: true, toneMapping: THREE.NeutralToneMapping }}
-      camera={{ position: cameraFor(set, mode), fov: 40, near: 0.5, far: 2000 }}
+      camera={{ position: cameraFor(set, mode, frame), fov: 40, near: 0.5, far: 2000 }}
     >
       <color attach="background" args={[COLORS.sky]} />
-      <HouseLights size={size} front={frontSide(set.plot)} />
+      <HouseLights size={size} front={frontSide(set.plot)} center={center} />
       {mode === 'interior' ? (
         <group>
           {interiorModel && <InteriorFloor set={set} floorId={interiorModel.floor.id} />}
@@ -262,7 +272,7 @@ export function Model3DSheet({ set, mode, floorId }: { set: DrawingSet; mode: Mo
             <planeGeometry args={[set.plot.width + 40, set.plot.height + 40]} />
             <meshStandardMaterial color="#e8e4dc" />
           </mesh>
-          <ContactShadows position={[0, 0.01, 0]} opacity={0.3} scale={size * 1.6} blur={2} far={10} />
+          <ContactShadows position={[center.x, 0.01, center.z]} opacity={0.3} scale={size * 1.6} blur={2} far={10} />
         </group>
       ) : (
         <group>
@@ -270,7 +280,7 @@ export function Model3DSheet({ set, mode, floorId }: { set: DrawingSet; mode: Mo
           <Building set={set} />
         </group>
       )}
-      <OrbitControls makeDefault target={[0, targetY, 0]} minDistance={8} maxDistance={size * 5} maxPolarAngle={Math.PI / 2 - 0.02} />
+      <OrbitControls makeDefault target={[center.x, targetY, center.z]} minDistance={8} maxDistance={size * 5} maxPolarAngle={Math.PI / 2 - 0.02} />
     </Canvas>
   )
 }

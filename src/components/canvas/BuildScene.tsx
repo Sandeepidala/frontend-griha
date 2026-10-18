@@ -6,6 +6,7 @@ import { type BuildSequence, RAW_COLORS, pieceProgress } from '@/lib/drawings/co
 import { OUTWARD, frontSide } from '@/lib/drawings/geometry'
 import { finishFor, shapeGeometry } from '@/lib/three/solids'
 import { HouseLights } from '@/components/three/HouseLights'
+import { houseFrame } from '@/lib/three/framing'
 import type { BuildClock } from './buildClock'
 
 const SCENE_COLORS = {
@@ -43,10 +44,13 @@ interface BuildSceneProps {
 export function BuildScene({ sequence, clock, onEnd, onGrabCamera }: BuildSceneProps) {
   const { plot } = sequence
   const size = Math.max(plot.width, plot.height)
+  // The camera circles the house, not the middle of the plot, at a distance set by the house's size.
+  const frame = useMemo(() => houseFrame(plot, sequence.pieces.filter((p) => p.part === 'building').map((p) => p.rect)), [sequence, plot])
+  const { center } = frame
   const camera = useThree((state) => state.camera)
   const aspect = useThree((state) => state.size.width / Math.max(1, state.size.height))
   const controls = useRef<ComponentRef<typeof OrbitControls>>(null)
-  const lookAt = useRef(new THREE.Vector3(0, 4, 0))
+  const lookAt = useRef(new THREE.Vector3(center.x, 4, center.z))
   const goal = useRef(new THREE.Vector3())
 
   // Built once per sequence; each frame only moves, scales and recolours them.
@@ -145,7 +149,7 @@ export function BuildScene({ sequence, clock, onEnd, onGrabCamera }: BuildSceneP
   const frontAngle = Math.atan2(front.y, front.x)
   const startAngle = frontAngle + 0.8
   // Further back on a tall, narrow screen (a phone held upright), so the whole house stays in view.
-  const radius = size * 1.55 * Math.max(1, 1.25 / aspect)
+  const radius = frame.size * 2.6 * Math.max(1, 1.25 / aspect)
 
   useFrame((_, delta) => {
     if (clock.tick(delta)) onEnd()
@@ -206,11 +210,11 @@ export function BuildScene({ sequence, clock, onEnd, onGrabCamera }: BuildSceneP
     // The camera circles slowly and rises with the building, looking at its middle. Its path depends
     // only on the clock, so a recorded frame is the same however fast frames are drawn; smoothing
     // is only for coming back to the path after the viewer has moved the camera.
-    lookAt.current.y = Math.max(3, top * 0.55)
+    lookAt.current.set(center.x, Math.max(3, top * 0.55), center.z)
     if (clock.autoCamera) {
       const angle = startAngle - (t / sequence.duration) * 1.3
-      const y = size * 0.55 + Math.max(top, 6) * 1.05
-      goal.current.set(Math.cos(angle) * radius, y, Math.sin(angle) * radius)
+      const y = frame.size * 0.8 + Math.max(top, 6) * 1.05
+      goal.current.set(center.x + Math.cos(angle) * radius, y, center.z + Math.sin(angle) * radius)
       const away = camera.position.distanceTo(goal.current)
       if (clock.recording || away < 0.5) camera.position.copy(goal.current)
       else camera.position.lerp(goal.current, Math.min(1, delta * 3))
@@ -222,7 +226,7 @@ export function BuildScene({ sequence, clock, onEnd, onGrabCamera }: BuildSceneP
   return (
     <>
       <color attach="background" args={[SCENE_COLORS.sky]} />
-      <HouseLights size={size} front={frontSide(plot)} />
+      <HouseLights size={Math.max(frame.size * 1.4, 30)} front={frontSide(plot)} center={center} />
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.03, 0]} receiveShadow>
         <planeGeometry args={[size * 6, size * 6]} />
         <meshStandardMaterial color={SCENE_COLORS.grass} />
@@ -243,7 +247,7 @@ export function BuildScene({ sequence, clock, onEnd, onGrabCamera }: BuildSceneP
         ref={controls}
         makeDefault
         minDistance={8}
-        maxDistance={size * 5}
+        maxDistance={Math.max(size, frame.size * 3) * 2.5}
         maxPolarAngle={Math.PI / 2 - 0.03}
         onStart={() => {
           if (clock.autoCamera) onGrabCamera()

@@ -7,7 +7,9 @@ import { Model3DSheet } from '@/components/drawings/Model3DSheet'
 import { StyleButton } from '@/components/style/StylePicker'
 import { SegmentedControl } from '@/components/ui/SegmentedControl'
 import { useThemeColors } from '@/hooks/useThemeColors'
+import { roomRect } from '@/lib/drawings/geometry'
 import { buildDrawingSet } from '@/lib/drawings/sheets'
+import { houseFrame } from '@/lib/three/framing'
 import { useDesignStore } from '@/stores/useDesignStore'
 import { useProjectsStore } from '@/stores/useProjectsStore'
 import type { FloorFinish, Room } from '@/types/design'
@@ -92,7 +94,7 @@ function RoomBox({
   )
 }
 
-function Scene() {
+function Scene({ target }: { target: { x: number; z: number } }) {
   const colors = useThemeColors()
   const plot = useDesignStore((state) => state.plot)
   const floors = useDesignStore((state) => state.floors)
@@ -148,7 +150,7 @@ function Scene() {
       </Billboard>
 
       <ContactShadows position={[0, 0, 0]} opacity={0.35} scale={Math.max(plot.width, plot.height) * 1.6} blur={2} far={12} />
-      <OrbitControls makeDefault minDistance={10} maxDistance={120} maxPolarAngle={Math.PI / 2 - 0.02} />
+      <OrbitControls makeDefault target={[target.x, 0, target.z]} minDistance={10} maxDistance={160} maxPolarAngle={Math.PI / 2 - 0.02} />
     </>
   )
 }
@@ -182,15 +184,20 @@ function HouseView() {
   const deferredFloors = useDeferredValue(floors)
   const deferredPlot = useDeferredValue(plot)
   const set = useMemo(() => buildDrawingSet(deferredPlot, deferredFloors, project?.name ?? '', '', { brief }), [deferredPlot, deferredFloors, project?.name, brief])
-  return <Model3DSheet set={set} mode="exterior" floorId={activeFloorId} />
+  // Keyed by project, so opening another project frames its house afresh.
+  return <Model3DSheet key={projectId ?? 'none'} set={set} mode="exterior" floorId={activeFloorId} />
 }
 
 /** The rooms as coloured volumes, to select and check them floor by floor. */
 function RoomsView() {
   const plot = useDesignStore((state) => state.plot)
+  const floors = useDesignStore((state) => state.floors)
+  // Aimed at the rooms, not the middle of the plot; worked out when the view opens.
+  const [frame] = useState(() => houseFrame(plot, floors.flatMap((f) => f.rooms.filter((r) => r.visible).map(roomRect))))
+  const { center, size } = frame
   return (
-    <Canvas shadows="percentage" camera={{ position: [plot.width * 0.9, plot.height * 0.85, plot.height * 0.95], fov: 45 }}>
-      <Scene />
+    <Canvas shadows="percentage" camera={{ position: [center.x + size * 1.2, size * 1.65, center.z + size * 1.85], fov: 45 }}>
+      <Scene target={center} />
     </Canvas>
   )
 }
